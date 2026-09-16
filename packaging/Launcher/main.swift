@@ -255,7 +255,7 @@ final class Controller: NSObject, NSApplicationDelegate {
     }
 
     func startServer() {
-        status.stringValue = "Modelle werden geladen …"
+        status.stringValue = "Server wird gestartet …"
         bar.isIndeterminate = true
         bar.startAnimation(nil)
         port = freePort()
@@ -293,22 +293,43 @@ final class Controller: NSObject, NSApplicationDelegate {
         waitForServer(attempt: 0)
     }
 
+    private func portIsOpen(_ port: Int) -> Bool {
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+        var tv = timeval(tv_sec: 1, tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        var addr = sockaddr_in()
+        addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = UInt16(port).bigEndian
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+        return withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) == 0
+            }
+        }
+    }
+
     private func waitForServer(attempt: Int) {
-        guard attempt < 600 else { failed("Der Server antwortet nicht."); return }
-        var req = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/")!)
-        req.timeoutInterval = 2
-        URLSession.shared.dataTask(with: req) { [weak self] _, response, _ in
+        guard attempt < 240 else {
+            failed("Der Server antwortet nicht — „Details einblenden“ zeigt warum.")
+            return
+        }
+        let p = port
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self else { return }
+            let open = self.portIsOpen(p)
             DispatchQueue.main.async {
-                guard let self else { return }
-                if (response as? HTTPURLResponse)?.statusCode != nil {
+                if open {
                     self.serverIsUp()
-                } else {
+                } else if self.serverTask?.isRunning == true {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                         self.waitForServer(attempt: attempt + 1)
                     }
                 }
             }
-        }.resume()
+        }
     }
 
     private func serverIsUp() {
