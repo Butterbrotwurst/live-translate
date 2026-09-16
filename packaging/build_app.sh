@@ -106,19 +106,36 @@ echo "==> bundling payload"
 cp "$ROOT/packaging/bootstrap.sh" "$APP/Contents/Resources/bootstrap.sh"
 chmod +x "$APP/Contents/Resources/bootstrap.sh"
 rsync -a \
+  --include 'data/samples/de_test.wav' \
   --exclude '.venv' --exclude '__pycache__' --exclude '.git' --exclude 'models' \
   --exclude 'transcripts' --exclude 'packaging' --exclude 'data/flores200_dataset' \
   --exclude 'data/bench' --exclude '*.wav' --exclude '*.aiff' \
   "$ROOT/" "$APP/Contents/Resources/payload/"
 
 echo "==> signing ($IDENTITY)"
-# inside-out: nested executables first, bundle last
+# Keep this file comment-free: AMFI's plist parser rejects XML comments.
+# It grants com.apple.security.device.audio-input -- mandatory under the Hardened
+# Runtime, which otherwise denies the microphone without ever asking the user.
+ENT="$ROOT/packaging/LiveTranslate.entitlements"
+# inside-out: nested executables first, bundle last. The bundle carries the microphone
+# entitlement -- the Hardened Runtime denies audio input without it, silently.
 codesign --force --timestamp --options runtime --sign "$IDENTITY" \
   "$APP/Contents/Resources/bin/uv" 2>/dev/null \
-  || codesign --force --sign "$IDENTITY" "$APP/Contents/Resources/bin/uv"
-codesign --force --timestamp --options runtime --sign "$IDENTITY" "$APP" 2>/dev/null \
-  || codesign --force --sign "$IDENTITY" "$APP"
+  || codesign --force --options runtime --sign "$IDENTITY" "$APP/Contents/Resources/bin/uv"
+codesign --force --timestamp --options runtime --entitlements "$ENT" --sign "$IDENTITY" "$APP" 2>/dev/null \
+  || codesign --force --options runtime --entitlements "$ENT" --sign "$IDENTITY" "$APP"
 codesign --verify --deep --strict "$APP" && echo "    signature ok"
+codesign -d --entitlements - --xml "$APP" 2>/dev/null | grep -q 'audio-input' \
+  && echo "    Mikrofon-Entitlement vorhanden" \
+  || { echo "    FEHLER: Mikrofon-Entitlement fehlt -- die App bliebe stumm." >&2; exit 1; }
+if [ "$IDENTITY" = "-" ]; then
+  # An ad-hoc signature has no stable identity, so every rebuild looks like a new app
+  # to macOS: the microphone grant from the last build no longer matches and TCC then
+  # denies silently instead of asking again -- the app "listens" to nothing.
+  echo "    WARNUNG: ad-hoc signiert. Nach jedem Rebuild vergisst macOS die"
+  echo "    Mikrofon-Freigabe. Vor dem naechsten Start einmal:"
+  echo "      tccutil reset Microphone de.enayati.livetranslate"
+fi
 
 echo "==> Anleitung"
 cat > "$STAGE/Bitte zuerst lesen.txt" <<'TXT'
@@ -127,7 +144,8 @@ Live Translate — lokale Live-Übersetzung
 
 Voraussetzungen
   · MacBook/Mac mit Apple-Silicon-Chip (M1 oder neuer), mindestens 16 GB RAM
-  · rund 12 GB freier Speicherplatz
+  · rund 12 GB freier Speicherplatz (Macs mit 24 GB RAM oder mehr bekommen das
+    groessere Uebersetzungsmodell und brauchen rund 18 GB)
   · Internet für die einmalige Einrichtung
 
 So geht's

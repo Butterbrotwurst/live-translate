@@ -8,3 +8,7 @@ Lokales Live-Übersetzungstool (Albanisch/Deutsch → Englisch) für Apple Silic
 - Benchmark: `scripts/bench_flores.py`, Daten in `data/flores200_dataset/` (gitignored, Download-URL im Skript-Kommentar / RESEARCH.md).
 - Recherche-Grundlage mit allen Modell-Entscheidungen: `RESEARCH.md`.
 - Ollama nutzt auf 24 GB kein MLX → immer `mlx-lm` direkt verwenden.
+- Packaging-Falle: alles, was eine Bibliothek erst zur Laufzeit nachlädt (spaCy-Modell
+  `en_core_web_sm` für Kokoro, HF-Repos), muss in `pyproject.toml` bzw. in
+  `packaging/bootstrap.sh` stehen — im fertigen App-Bundle gibt es weder pip/uv noch
+  ffmpeg auf dem PATH.

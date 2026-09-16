@@ -6,6 +6,7 @@ import queue
 import re
 import threading
 import time
+import wave
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -16,6 +17,31 @@ from .asr import ASR
 from .config import HELPER_TRANSLATOR, POLISH_WITH_MAIN, ROOT, SAMPLE_RATE, VAD_CHUNK, LangProfile
 from .translate import History, Translator, make_translator
 from .vad import Segment, Segmenter
+
+
+def _load_audio(path: str) -> np.ndarray:
+    """Mono float32 at SAMPLE_RATE. Plain PCM WAV is read with the stdlib, because the
+    packaged app runs on Macs without ffmpeg -- which is what mlx_whisper's loader shells
+    out to. Anything else still goes through ffmpeg."""
+    try:
+        with wave.open(path, "rb") as w:
+            if w.getsampwidth() != 2 or w.getcomptype() != "NONE":
+                raise wave.Error("not 16-bit PCM")
+            channels, rate = w.getnchannels(), w.getframerate()
+            raw = np.frombuffer(w.readframes(w.getnframes()), dtype="<i2").astype(np.float32) / 32768.0
+    except (wave.Error, EOFError):
+        try:
+            from mlx_whisper.audio import load_audio
+            return np.array(load_audio(path, SAMPLE_RATE), dtype=np.float32)
+        except FileNotFoundError as e:  # ffmpeg missing
+            raise RuntimeError(f"{Path(path).name}: nur unkomprimierte WAV-Dateien werden ohne ffmpeg unterstützt") from e
+    if channels > 1:
+        raw = raw.reshape(-1, channels).mean(axis=1)
+    if rate != SAMPLE_RATE:
+        n = int(len(raw) * SAMPLE_RATE / rate)
+        raw = np.interp(np.linspace(0, len(raw), n, endpoint=False), np.arange(len(raw)), raw).astype(np.float32)
+    return np.ascontiguousarray(raw, dtype=np.float32)
+
 
 # Loaded models are expensive; keep them across pipeline restarts (switching settings in the UI).
 _MODEL_CACHE: dict[tuple, Any] = {}
@@ -104,6 +130,7 @@ class Pipeline:
     on_partial: Callable[[str], None] = lambda s: None  # live transcript of the segment being spoken
     on_provisional: Callable[[str], None] = lambda s: None  # provisional translation of that live transcript
     on_block: Callable[[Block], None] = lambda b: None
+    on_level: Callable[[float], None] = lambda v: None  # live input peak, 0..1
     output_device: int | None = None
     partial_every_s: float = 1.2
     provisional: bool = True
@@ -395,6 +422,11 @@ class Pipeline:
             self.on_update(u)
 
     # --- sources ---------------------------------------------------------
+    # A microphone macOS has not granted access to still opens and still delivers
+    # chunks -- they are just all exactly zero. Without this check the app sits on
+    # "Hört zu" forever and looks broken. A real mic always has a noise floor.
+    SILENCE_LIMIT_S = 5.0
+
     def run_mic(self, device: int | None, stop: threading.Event) -> None:
         import sounddevice as sd
 
@@ -403,21 +435,38 @@ class Pipeline:
         def cb(indata, frames, t, status):
             audio_q.put(indata[:, 0].copy())
 
+        silent_s = 0.0
+        heard_anything = False
+        last_level = 0.0
         with sd.InputStream(
             samplerate=SAMPLE_RATE, channels=1, dtype="float32", blocksize=VAD_CHUNK, device=device, callback=cb
         ):
             self.on_status("listening")
             while not stop.is_set():
                 try:
-                    self.feed_chunk(audio_q.get(timeout=0.2))
+                    chunk = audio_q.get(timeout=0.2)
                 except queue.Empty:
-                    pass
+                    continue
+                peak = float(np.max(np.abs(chunk))) if chunk.size else 0.0
+                if peak > 0.0:
+                    heard_anything = True
+                elif not heard_anything:
+                    silent_s += len(chunk) / SAMPLE_RATE
+                    if silent_s >= self.SILENCE_LIMIT_S:
+                        raise RuntimeError(
+                            "Kein Mikrofonsignal. Bitte in den Systemeinstellungen unter "
+                            "„Datenschutz & Sicherheit → Mikrofon“ den Zugriff für Live Translate erlauben."
+                        )
+                # a coarse level, so the UI can show that something is actually arriving
+                level = round(min(peak, 1.0), 3)
+                if abs(level - last_level) > 0.02:
+                    last_level = level
+                    self.on_level(level)
+                self.feed_chunk(chunk)
         self.flush()
 
     def run_file(self, path: str, realtime: bool = False, stop: threading.Event | None = None) -> None:
-        from mlx_whisper.audio import load_audio
-
-        audio = np.array(load_audio(path, SAMPLE_RATE), dtype=np.float32)
+        audio = _load_audio(path)
         n = len(audio) // VAD_CHUNK * VAD_CHUNK
         self.on_status("listening")
         for i in range(0, n, VAD_CHUNK):

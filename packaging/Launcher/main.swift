@@ -47,6 +47,7 @@ final class Controller: NSObject, NSApplicationDelegate {
     let logView = NSTextView()
     let logScroll = NSScrollView()
     let actionButton = NSButton()
+    let micButton = NSButton()
 
     var setupTask: Process?
     var serverTask: Process?
@@ -62,8 +63,33 @@ final class Controller: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
         buildMenu()
         buildWindow()
-        AVCaptureDevice.requestAccess(for: .audio) { _ in }
+        checkMicrophone()
         startSetup()
+    }
+
+    /// Without this the app happily "listens" to a microphone macOS never granted:
+    /// the stream opens and delivers nothing but zeros, and the UI looks stuck.
+    private func checkMicrophone() {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            break
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
+                DispatchQueue.main.async { if !granted { self?.showMicDenied() } }
+            }
+        default:  // .denied, .restricted
+            showMicDenied()
+        }
+    }
+
+    private func showMicDenied() {
+        micButton.isHidden = false
+        log("Kein Mikrofon-Zugriff — Live-Übersetzung bleibt stumm, bis er erteilt ist.")
+    }
+
+    @objc private func openMicSettings() {
+        let url = "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+        NSWorkspace.shared.open(URL(string: url)!)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ s: NSApplication) -> Bool { true }
@@ -121,13 +147,19 @@ final class Controller: NSObject, NSApplicationDelegate {
         actionButton.action = #selector(primaryAction)
         actionButton.isHidden = true
 
+        micButton.title = "Mikrofon-Zugriff erlauben …"
+        micButton.bezelStyle = .rounded
+        micButton.target = self
+        micButton.action = #selector(openMicSettings)
+        micButton.isHidden = true
+
         let head = NSStackView(views: [title, status, bar])
         head.orientation = .vertical
         head.alignment = .leading
         head.spacing = 6
         for v in [title, status, bar] { v.translatesAutoresizingMaskIntoConstraints = false }
 
-        let footer = NSStackView(views: [detailsToggle, NSView(), actionButton])
+        let footer = NSStackView(views: [detailsToggle, NSView(), micButton, actionButton])
         footer.orientation = .horizontal
 
         let root = NSStackView(views: [head, logScroll, footer])

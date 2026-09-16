@@ -6,6 +6,10 @@ requires-python = ">=3.13"
 dependencies = [
     "ctranslate2>=4.8.2",
     "datasets>=5.0.1",
+    # Kokoro's English G2P (misaki) needs this spaCy model. It is NOT on PyPI, and
+    # misaki downloads it on first use -- which fails in the packaged app (no pip/uv
+    # on PATH) and kills the TTS thread. Pinning the wheel puts it in uv.lock instead.
+    "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
     "fastapi>=0.141.1",
     "huggingface-hub>=1.31.0",
     "misaki[en]>=0.9.4",
@@ -30,6 +34,9 @@ live-translate-ui = "live_translate.server:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true  # the en_core_web_sm wheel is a direct URL
 
 [tool.hatch.build.targets.wheel]
 packages = ["live_translate"]

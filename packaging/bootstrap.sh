@@ -9,7 +9,7 @@ RES="${1:?resources dir missing}"
 APPSUP="$HOME/Library/Application Support/LiveTranslate"
 SRC="$APPSUP/src"
 STAMPS="$APPSUP/stamps"
-TOTAL=6
+TOTAL=8
 
 # standard cache location, so models another tool already downloaded are reused
 export HF_HOME="${HF_HOME:-$HOME/.cache/huggingface}"
@@ -60,9 +60,15 @@ fi
 
 PY=("$UV" run --directory "$SRC" --frozen python)
 
+# every repo the app loads at "Start" -- anything missing here would be downloaded
+# in the background on the first Start, with the UI stuck on "Lade Modelle …"
+read -r MT_REPO HELPER_REPO DE_ASR_REPO <<<"$("${PY[@]}" -c '
+from live_translate.config import HELPER_TRANSLATOR, PROFILES, TRANSLATORS, default_translator
+print(TRANSLATORS[default_translator()][1], TRANSLATORS[HELPER_TRANSLATOR][1], PROFILES["de"].asr_model)')"
+[ -n "${MT_REPO:-}" ] || fail "Die Modell-Liste konnte nicht gelesen werden."
+
 # 4 ------------------------------------------------------------ translator --
 # the model is picked from this Mac's RAM, so a 16 GB machine gets the 4B one
-MT_REPO="$("${PY[@]}" -c 'from live_translate.config import TRANSLATORS, default_translator; print(TRANSLATORS[default_translator()][1])')"
 step 4 "Übersetzungsmodell wird geladen ($MT_REPO) …"
 if ! verify mt "$(hf_dir "$MT_REPO")"; then
   "${PY[@]}" "$SRC/scripts/prefetch.py" "$MT_REPO" \
@@ -72,8 +78,21 @@ else
   prog 1.0
 fi
 
-# 5 ------------------------------------------------------------------ tts ---
-step 5 "Sprachausgabe wird geladen (ca. 0,4 GB) …"
+# 5 ----------------------------------------------------------------- helper -
+# used for provisional translations and sentence polishing next to the main model
+step 5 "Schnellmodell wird geladen ($HELPER_REPO) …"
+if [ "$HELPER_REPO" = "$MT_REPO" ]; then
+  touch "$STAMPS/helper"; prog 1.0
+elif ! verify helper "$(hf_dir "$HELPER_REPO")"; then
+  "${PY[@]}" "$SRC/scripts/prefetch.py" "$HELPER_REPO" \
+    || fail "Das Schnellmodell konnte nicht geladen werden."
+  done_step helper
+else
+  prog 1.0
+fi
+
+# 6 ------------------------------------------------------------------ tts ---
+step 6 "Sprachausgabe wird geladen (ca. 0,4 GB) …"
 if ! verify tts "$(hf_dir mlx-community/Kokoro-82M-bf16)"; then
   "${PY[@]}" "$SRC/scripts/prefetch.py" mlx-community/Kokoro-82M-bf16 \
     || fail "Die Sprachausgabe konnte nicht geladen werden."
@@ -82,8 +101,18 @@ else
   prog 1.0
 fi
 
-# 6 ------------------------------------------------------------------ asr ---
-step 6 "Spracherkennung Albanisch wird geladen (ca. 3 GB) …"
+# 7 -------------------------------------------------------------- asr (de) --
+step 7 "Spracherkennung Deutsch wird geladen (ca. 1,6 GB) …"
+if ! verify asr_de "$(hf_dir "$DE_ASR_REPO")"; then
+  "${PY[@]}" "$SRC/scripts/prefetch.py" "$DE_ASR_REPO" \
+    || fail "Die deutsche Spracherkennung konnte nicht geladen werden."
+  done_step asr_de
+else
+  prog 1.0
+fi
+
+# 8 -------------------------------------------------------------- asr (sq) --
+step 8 "Spracherkennung Albanisch wird geladen (ca. 3 GB) …"
 MLX_SQ="$SRC/models/whisper-large-v3-turbo-sq-v2-mlx"
 if ! verify asr "$MLX_SQ/weights.safetensors"; then
   SQ_CACHE="$(hf_dir Flutra/whisper-large-v3-turbo-sq-v2)"
