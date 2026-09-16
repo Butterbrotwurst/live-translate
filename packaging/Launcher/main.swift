@@ -16,7 +16,13 @@ final class LineReader {
         self.onLine = onLine
         pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let chunk = handle.availableData
-            guard !chunk.isEmpty else { return }
+            // Empty means EOF -- the writer is gone. The handler stays armed and the
+            // dispatch source fires again immediately, so without clearing it here the
+            // app spins on a full core for as long as it is open.
+            guard !chunk.isEmpty else {
+                handle.readabilityHandler = nil
+                return
+            }
             self?.feed(chunk)
         }
     }
