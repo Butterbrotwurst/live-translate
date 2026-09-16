@@ -12,3 +12,6 @@ Lokales Live-Übersetzungstool (Albanisch/Deutsch → Englisch) für Apple Silic
   `en_core_web_sm` für Kokoro, HF-Repos), muss in `pyproject.toml` bzw. in
   `packaging/bootstrap.sh` stehen — im fertigen App-Bundle gibt es weder pip/uv noch
   ffmpeg auf dem PATH.
+- Audio-Geräte: PortAudio liest die Geräteliste nur beim Initialisieren. `/devices`
+  re-initialisiert deshalb (nur solange keine Session läuft), und die UI schickt
+  Geräte-**Namen** statt Indizes — Indizes verschieben sich, sobald ein Gerät kommt oder geht.

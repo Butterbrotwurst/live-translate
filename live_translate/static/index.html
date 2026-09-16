@@ -30,7 +30,13 @@
   .brand { font-weight: 700; letter-spacing: -.01em; font-size: 17px; display: flex; align-items: center; gap: 10px; }
   .brand small { color: var(--muted); font-weight: 500; }
   .status { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px;
-    background: var(--panel); border: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+    background: var(--panel); border: 1px solid var(--line); font-size: 13px; color: var(--muted);
+    max-width: 46ch; }
+  .status #statusText { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* input level, so "Hört zu" can be told apart from "hears nothing" at a glance */
+  .meter { width: 34px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; flex: none; }
+  .meter i { display: block; height: 100%; width: 0; background: var(--ok); border-radius: 2px;
+    transition: width .1s linear; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
   .status[data-s="listening"] .dot { background: var(--ok); animation: pulse 1.6s infinite; }
   .status[data-s="speaking"] .dot { background: var(--accent); animation: pulse .7s infinite; }
@@ -130,7 +136,7 @@
 <header>
   <div class="bar">
     <div class="brand">Live Translate <small id="pair">Deutsch → English</small></div>
-    <div class="status" id="status" data-s="idle"><span class="dot"></span><span id="statusText">Bereit</span></div>
+    <div class="status" id="status" data-s="idle"><span class="dot"></span><span id="statusText">Bereit</span><span class="meter" id="meter" hidden><i></i></span></div>
     <span class="timer" id="timer"></span>
     <div class="spacer"></div>
     <div class="seg-ctl" id="modeCtl">
@@ -158,6 +164,7 @@
     <label class="f">Kontext <select id="context"><option>0</option><option>1</option><option selected>3</option><option>5</option><option>8</option></select></label>
     <label class="f">Mikrofon <select id="input"></select></label>
     <label class="f">Ausgabe <select id="output"></select></label>
+    <button class="btn" id="devBtn" title="Geräteliste neu einlesen – nötig, wenn Kopfhörer erst nach dem Start verbunden wurden">Geräte neu suchen</button>
     <label class="f">Stimme <select id="voice"></select></label>
     <label class="toggle"><input type="checkbox" id="tts" checked> Sprachausgabe</label>
     <label class="toggle" title="Übersetzt das laufende Segment schon während des Sprechens (grau) und ersetzt es danach durch die endgültige Übersetzung"><input type="checkbox" id="prov" checked> Vorläufige Übersetzung</label>
@@ -211,6 +218,7 @@ function handle(m) {
   else if (m.type === 'block') block(m.block);
   else if (m.type === 'partial') live(m.text);
   else if (m.type === 'provisional') provisional(m.text);
+  else if (m.type === 'level') level(m.level);
   else if (m.type === 'saved' && m.path) { $('saved').textContent = 'Gespeichert: ' + m.path; toast('Transkript gespeichert'); }
 }
 function resetViews() {
@@ -220,17 +228,33 @@ function resetViews() {
 
 // ---------- status ----------
 const labels = { idle: 'Bereit', ready: 'Bereit', listening: 'Hört zu', speaking: 'Spricht …', stopping: 'Beende …', offline: 'Keine Verbindung' };
+// which model is loading, so a slow first load looks like progress and not like a hang
+function loadingText(s) {
+  if (s.startsWith('loading ASR')) return 'Lade Spracherkennung …';
+  if (s.startsWith('loading translator')) return 'Lade Übersetzer ' + s.slice(19).replace(/\s*…\s*$/, '') + ' …';
+  if (s.startsWith('loading helper model')) return 'Lade Schnellmodell …';
+  if (s.startsWith('loading TTS')) return 'Lade Sprachausgabe …';
+  return 'Lade Modelle …';
+}
+// sqrt makes quiet speech visible; the bar is a rough presence indicator, not a VU meter
+function level(v) {
+  $('meter').querySelector('i').style.width = Math.min(100, Math.sqrt(v) * 130) + '%';
+}
 function setStatus(s) {
   state.status = s;
   const el = $('status'); el.dataset.s = s;
   let text = labels[s] || s;
-  if (s.startsWith('loading')) text = 'Lade Modelle …';
+  if (s.startsWith('loading')) text = loadingText(s);
+  else if (s.startsWith('error')) text = 'Fehler: ' + s.replace(/^error:\s*/, '');
+  el.title = text;
   $('statusText').textContent = text;
   const running = !['idle', 'offline', 'ready'].includes(s) && !s.startsWith('error');
   state.running = running;
   $('startBtn').textContent = running ? 'Stop' : 'Start';
   $('startBtn').dataset.running = running ? '1' : '0';
   $('startBtn').disabled = s === 'stopping';
+  $('meter').hidden = !running;
+  if (!running) level(0);
   if (running && !state.startedAt) state.startedAt = Date.now();
   if (!running) { state.startedAt = null; live(''); }
   $('demoBtn').disabled = running;
@@ -376,18 +400,33 @@ function fillOptions() {
   fill('lang', Object.entries(o.langs), 'de');
   fill('translator', o.translators.map(t => [t, t]), o.default_translator || 'qwen');
   fill('voice', o.voices.map(v => [v, v]), 'af_heart');
-  fetch('/devices').then(r => r.json()).then(d => {
-    const fillDev = (id, list) => { const s = $(id); const cur = s.value; s.innerHTML = ''; s.add(new Option('Standard', '')); list.forEach(x => s.add(new Option(x.name + (x.default ? ' (Standard)' : ''), x.id))); s.value = cur; };
-    fillDev('input', d.inputs); fillDev('output', d.outputs);
-  });
-  restore();
+  loadDevices().then(restore);
 }
+// Value of a device option is its NAME, not the PortAudio index: indices shift whenever a
+// device is connected or removed, so a stored index can point at a different device later.
+function loadDevices() {
+  return fetch('/devices').then(r => r.json()).then(d => {
+    const fillDev = (id, list) => {
+      const s = $(id), cur = s.value;
+      s.innerHTML = '';
+      s.add(new Option('Standard', ''));
+      list.forEach(x => s.add(new Option(x.name + (x.default ? ' (Standard)' : ''), x.name)));
+      if ([...s.options].some(o => o.value === cur)) s.value = cur;
+    };
+    fillDev('input', d.inputs); fillDev('output', d.outputs);
+  }).catch(() => {});
+}
+$('devBtn').onclick = () => {
+  const b = $('devBtn'); b.disabled = true; b.textContent = 'Suche …';
+  loadDevices().then(() => { b.disabled = false; b.textContent = 'Geräte neu suchen'; });
+};
+
 function settings(extra = {}) {
   const s = {
     lang: $('lang').value, translator: $('translator').value, context: +$('context').value,
     tts: $('tts').checked, voice: $('voice').value, provisional: $('prov').checked, polish: $('polish').checked,
-    input_device: $('input').value === '' ? null : +$('input').value,
-    output_device: $('output').value === '' ? null : +$('output').value, ...extra,
+    input_device: $('input').value || null,
+    output_device: $('output').value || null, ...extra,
   };
   localStorage.setItem('lt.settings', JSON.stringify({ ...s, size: $('size').value, theme: $('theme').value, focus: $('focus').checked, mode: state.mode }));
   return s;
@@ -395,8 +434,10 @@ function settings(extra = {}) {
 function restore() {
   try {
     const s = JSON.parse(localStorage.getItem('lt.settings') || '{}');
-    for (const k of ['lang', 'translator', 'context', 'voice', 'size', 'theme'])
-      if (s[k] !== undefined && [...$(k).options].some(o => o.value == s[k])) $(k).value = s[k];
+    // stored key -> element id (the two device selects are stored under their setting name)
+    for (const [k, id] of [['lang', 'lang'], ['translator', 'translator'], ['context', 'context'], ['voice', 'voice'],
+                           ['size', 'size'], ['theme', 'theme'], ['input_device', 'input'], ['output_device', 'output']])
+      if (s[k] != null && [...$(id).options].some(o => o.value == s[k])) $(id).value = s[k];
     if (s.tts !== undefined) $('tts').checked = s.tts;
     if (s.provisional !== undefined) $('prov').checked = s.provisional;
     if (s.polish !== undefined) $('polish').checked = s.polish;

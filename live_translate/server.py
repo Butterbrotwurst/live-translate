@@ -5,6 +5,7 @@ import argparse
 import asyncio
 import json
 import threading
+import traceback
 import webbrowser
 from pathlib import Path
 
@@ -79,7 +80,7 @@ class Session:
             tts_enabled=bool(s.get("tts", True)),
             voice=s.get("voice", TTS_VOICE),
             context_turns=int(s.get("context", 3)),
-            output_device=s.get("output_device"),
+            output_device=resolve_device(s.get("output_device"), "output"),
         )
         p.on_status = self._on_status
         p.on_update = lambda u: self.emit({"type": "utterance", "utterance": u.to_dict()})
@@ -88,6 +89,7 @@ class Session:
         p.provisional = bool(s.get("provisional", True))
         p.polish = bool(s.get("polish", True))
         p.on_block = lambda b: self.emit({"type": "block", "block": b.to_dict()})
+        p.on_level = lambda v: self.emit({"type": "level", "level": v})
         self.pipeline = p
         self.thread = threading.Thread(target=self._run, args=(p, s), daemon=True)
         self.thread.start()
@@ -102,10 +104,14 @@ class Session:
             if s.get("file"):
                 p.run_file(s["file"], realtime=True, stop=self.stop)
             else:
-                p.run_mic(s.get("input_device"), self.stop)
+                p.run_mic(resolve_device(s.get("input_device"), "input"), self.stop)
             p.wait_idle(timeout=60)
-        except Exception as e:  # surface model/device errors in the UI
-            self._on_status(f"error: {e}")
+        # BaseException, not Exception: libraries in the model stack call sys.exit()
+        # on setup problems, and threading swallows SystemExit without a word -- the
+        # UI would sit on "Lade Modelle …" forever instead of showing what broke.
+        except BaseException as e:
+            traceback.print_exc()
+            self._on_status(f"error: {type(e).__name__}: {e}".rstrip(": "))
             return
         finally:
             try:
@@ -121,6 +127,25 @@ class Session:
         self._on_status("stopping")
 
 
+def resolve_device(value: object, kind: str) -> int | None:
+    """Device index for a name or an index. Names win, because PortAudio indices shift as
+    soon as a device appears or disappears: the index the page stored yesterday may well be
+    a different device today. Returns None (= system default) if nothing matches."""
+    if value is None or value == "":
+        return None
+    import sounddevice as sd
+
+    channels = "max_input_channels" if kind == "input" else "max_output_channels"
+    devs = sd.query_devices()
+    if isinstance(value, str) and not value.lstrip("-").isdigit():
+        for i, d in enumerate(devs):
+            if d["name"] == value and d[channels] > 0:
+                return i
+        return None
+    idx = int(value)
+    return idx if 0 <= idx < len(devs) and devs[idx][channels] > 0 else None
+
+
 session = Session()
 
 
@@ -132,6 +157,17 @@ async def index() -> str:
 @app.get("/devices")
 async def devices() -> JSONResponse:
     import sounddevice as sd
+
+    # PortAudio reads the device list once, when it initializes, and never again -- so a
+    # headset plugged in after the server started is invisible no matter how often the page
+    # is reloaded. Re-initializing rebuilds the list, but it invalidates every open stream,
+    # so only do it while no session is running.
+    if not (session.thread and session.thread.is_alive()):
+        try:
+            sd._terminate()
+            sd._initialize()
+        except Exception:
+            traceback.print_exc()
 
     devs = sd.query_devices()
     default_in, default_out = sd.default.device
