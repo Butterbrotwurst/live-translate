@@ -55,23 +55,28 @@ echo "==> app icon"
 ICONSET="$(mktemp -d)/AppIcon.iconset"
 mkdir -p "$ICONSET"
 cat > "$ICONSET/../mkicon.swift" <<'ICON'
+// White squircle, black glyph, no gradient. Apple's icon grid: 824 pt of art
+// inside a 1024 pt canvas, corner radius 185.
 import AppKit
-let size = 1024.0
+let size = 1024.0, art = 824.0, inset = (size - art) / 2
 let img = NSImage(size: NSSize(width: size, height: size))
 img.lockFocus()
-let rect = NSRect(x: 0, y: 0, width: size, height: size)
-let path = NSBezierPath(roundedRect: rect.insetBy(dx: size * 0.09, dy: size * 0.09),
-                        xRadius: size * 0.2, yRadius: size * 0.2)
-NSGradient(colors: [NSColor(srgbRed: 0.24, green: 0.47, blue: 0.95, alpha: 1),
-                    NSColor(srgbRed: 0.42, green: 0.25, blue: 0.85, alpha: 1)])!
-    .draw(in: path, angle: -90)
+let plate = NSBezierPath(roundedRect: NSRect(x: inset, y: inset, width: art, height: art),
+                         xRadius: 185, yRadius: 185)
+NSColor.white.setFill()
+plate.fill()
+// hairline edge so the white plate still has a silhouette on a white background
+NSColor(white: 0.85, alpha: 1).setStroke()
+plate.lineWidth = 4
+plate.stroke()
+let cfg = NSImage.SymbolConfiguration(pointSize: art * 0.56, weight: .regular)
+    .applying(NSImage.SymbolConfiguration(paletteColors: [.black]))
 if let sym = NSImage(systemSymbolName: "waveform", accessibilityDescription: nil)?
-    .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: size * 0.42, weight: .medium)) {
+    .withSymbolConfiguration(cfg) {
     let s = sym.size
-    let r = NSRect(x: (size - s.width) / 2, y: (size - s.height) / 2, width: s.width, height: s.height)
-    NSColor.white.set()
-    sym.draw(in: r, from: .zero, operation: .sourceOver, fraction: 1)
-    r.fill(using: .sourceAtop)
+    sym.draw(in: NSRect(x: (size - s.width) / 2, y: (size - s.height) / 2,
+                        width: s.width, height: s.height),
+             from: .zero, operation: .sourceOver, fraction: 1)
 }
 img.unlockFocus()
 let tiff = img.tiffRepresentation!
@@ -147,8 +152,11 @@ Wichtig
   · Alles läuft lokal auf deinem Mac. Es wird nichts ins Internet geschickt.
 
 Deinstallieren
-  App in den Papierkorb, dazu den Ordner
-  ~/Library/Application Support/LiveTranslate  löschen (das sind die ~11 GB).
+  App in den Papierkorb, dazu diese beiden Ordner löschen:
+    ~/Library/Application Support/LiveTranslate   (Python + Programmdateien)
+    ~/.cache/huggingface                          (die Sprachmodelle, ~8 GB)
+  Der zweite Ordner ist der übliche Ablageort für KI-Modelle. Falls du andere
+  KI-Programme nutzt, teilen die sich den Ordner - dann besser dort lassen.
 TXT
 
 echo "==> zipping"

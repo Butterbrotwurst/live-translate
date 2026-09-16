@@ -153,9 +153,10 @@ endgültiges Segment wartet. Abschaltbar in den Einstellungen („Vorläufige Ü
 
 ## Weitergabe als App
 
-`packaging/` baut ein `LiveTranslate.app`-Bundle (~20 MB), das sich beim ersten
-Start selbst einrichtet — Python 3.13, venv und alle Modelle landen in
-`~/Library/Application Support/LiveTranslate`. Der Empfänger sieht nie ein Terminal.
+`packaging/` baut ein `LiveTranslate.app`-Bundle (~21 MB), das sich beim ersten
+Start selbst einrichtet — Python 3.13 und venv landen in
+`~/Library/Application Support/LiveTranslate`, die Modelle im üblichen
+HuggingFace-Cache `~/.cache/huggingface`. Der Empfänger sieht nie ein Terminal.
 
 ```bash
 ./packaging/build_app.sh                 # ad-hoc signiert -> packaging/dist/LiveTranslate.zip
@@ -175,7 +176,23 @@ Das Übersetzungsmodell wird aus dem RAM des Zielrechners abgeleitet
 darunter Qwen-4B. Der Bootstrap lädt genau dieses eine Modell vor.
 
 Der albanische Whisper wird beim Setup aus `Flutra/whisper-large-v3-turbo-sq-v2`
-nach MLX konvertiert; das 3-GB-PyTorch-Original wird danach gelöscht.
+nach MLX konvertiert. Das 3-GB-PyTorch-Original wird danach gelöscht — aber nur,
+wenn es vorher nicht schon im Cache lag, damit ein bestehender Cache unangetastet
+bleibt.
+
+### Wiederholte Starts
+
+Jeder Schritt schreibt einen Stempel nach
+`~/Library/Application Support/LiveTranslate/stamps/`, und ein Stempel zählt nur,
+solange das zugehörige Artefakt wirklich existiert (`verify()` in `bootstrap.sh`):
+
+| Fall | Verhalten |
+|---|---|
+| Zweiter Start | alle sechs Schritte übersprungen, ~0,4 s bis zum Server |
+| Modelle schon im HF-Cache | kein Download, nur Konvertierung (~20 s) |
+| Abgebrochener Download | kein Stempel → Schritt läuft erneut, HF setzt den Blob fort |
+| `uv.lock` geändert | `deps` läuft neu, alles andere bleibt |
+| Artefakt gelöscht, Stempel da | Stempel wird verworfen, Schritt läuft erneut |
 
 ### Ohne Gatekeeper-Warnung ausliefern
 

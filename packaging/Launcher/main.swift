@@ -267,7 +267,6 @@ final class Controller: NSObject, NSApplicationDelegate {
         task.arguments = ["run", "--directory", src, "--frozen",
                           "live-translate-ui", "--port", String(port), "--no-browser"]
         var env = ProcessInfo.processInfo.environment
-        env["HF_HOME"] = appSupport.appendingPathComponent("hf").path
         env["UV_CACHE_DIR"] = appSupport.appendingPathComponent("uv-cache").path
         env["UV_PYTHON_INSTALL_DIR"] = appSupport.appendingPathComponent("python").path
         env["UV_NO_CONFIG"] = "1"
