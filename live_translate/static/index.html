@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live Translate</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --ink: #17181a; --muted: #6b7078; --line: #e6e6e2;
+    --accent: #2f6fed; --accent-ink: #ffffff; --ok: #1f9d55; --warn: #d9822b; --err: #d64545;
+    --shadow: 0 1px 2px rgba(0,0,0,.05), 0 8px 24px rgba(0,0,0,.05);
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif;
+    --size: 22px; --flow: 30px;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #111214; --panel: #1b1d20; --ink: #ececea; --muted: #8b909a; --line: #2a2d31;
+    --accent: #5b8cff; --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+  }}
+  :root[data-theme="dark"] {
+    --bg: #111214; --panel: #1b1d20; --ink: #ececea; --muted: #8b909a; --line: #2a2d31;
+    --accent: #5b8cff; --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); display: flex; flex-direction: column; }
+
+  header { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 85%, transparent);
+    backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); transition: opacity .3s; }
+  .bar { max-width: 1100px; margin: 0 auto; padding: 12px 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .brand { font-weight: 700; letter-spacing: -.01em; font-size: 17px; display: flex; align-items: center; gap: 10px; }
+  .brand small { color: var(--muted); font-weight: 500; }
+  .status { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px;
+    background: var(--panel); border: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .status[data-s="listening"] .dot { background: var(--ok); animation: pulse 1.6s infinite; }
+  .status[data-s="speaking"] .dot { background: var(--accent); animation: pulse .7s infinite; }
+  .status[data-s^="loading"] .dot, .status[data-s="stopping"] .dot { background: var(--warn); animation: pulse 1s infinite; }
+  .status[data-s^="error"] .dot { background: var(--err); }
+  @keyframes pulse { 0%,100% { transform: scale(1); opacity: 1 } 50% { transform: scale(1.6); opacity: .55 } }
+  .spacer { flex: 1; }
+  .timer { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 14px; }
+
+  button, select, input { font: inherit; color: inherit; }
+  .btn { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 8px 14px; cursor: pointer; font-size: 14px; }
+  .btn:hover { border-color: color-mix(in srgb, var(--ink) 25%, var(--line)); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; padding: 10px 20px; }
+  .btn.primary[data-running="1"] { background: var(--err); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  select { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 6px 8px; font-size: 13px; }
+  label.f { display: flex; flex-direction: column; gap: 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); cursor: pointer; user-select: none; }
+  .seg-ctl { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--panel); }
+  .seg-ctl button { border: 0; background: none; padding: 8px 14px; cursor: pointer; font-size: 14px; color: var(--muted); }
+  .seg-ctl button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+
+  .settings { max-width: 1100px; margin: 0 auto; padding: 0 20px 14px; display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; }
+  .settings[hidden] { display: none; }
+
+  main { flex: 1; max-width: 1100px; width: 100%; margin: 0 auto; padding: 24px 20px 120px; }
+  .empty { text-align: center; color: var(--muted); padding: 80px 20px; font-size: 16px; line-height: 1.6; }
+  .empty kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 6px; padding: 1px 7px; font-family: inherit; font-size: 13px; }
+
+  /* ---- cards mode ---- */
+  .u { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px 22px; margin-bottom: 12px; box-shadow: var(--shadow);
+    display: grid; grid-template-columns: 64px 1fr; gap: 6px 16px; animation: in .25s ease-out; }
+  .u[hidden] { display: none; }
+  @keyframes in { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
+  .u .t { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; padding-top: 6px; }
+  .u .en { font-size: var(--size); line-height: 1.45; letter-spacing: -.005em; }
+  .u .en.partial { color: color-mix(in srgb, var(--ink) 70%, var(--muted)); }
+  .u .src { grid-column: 2; color: var(--muted); font-size: calc(var(--size) * .68); line-height: 1.45; }
+  .u .meta { grid-column: 2; color: var(--muted); font-size: 12px; display: flex; gap: 14px; margin-top: 4px; opacity: 0; transition: opacity .2s; font-variant-numeric: tabular-nums; }
+  .u:hover .meta { opacity: 1; }
+  .u.pending .en { color: var(--muted); font-size: calc(var(--size) * .8); }
+  .live { border-style: dashed; color: var(--muted); }
+  .live .en { font-size: calc(var(--size) * .9); }
+  .live .src { font-style: italic; }
+  .cursor { display: inline-block; width: 2px; height: 1em; background: var(--accent); vertical-align: -0.15em; margin-left: 2px; animation: blink 1s steps(2) infinite; }
+  @keyframes blink { to { visibility: hidden } }
+  body[data-focus="1"] .u .src, body[data-focus="1"] .u .meta { display: none; }
+  body[data-focus="1"] { --size: 30px; --flow: 40px; }
+
+  /* ---- flow mode ---- */
+  #flow { font-size: min(var(--flow), 3.4vw); line-height: 1.45; letter-spacing: -.01em; padding-top: 4vh; text-wrap: pretty;
+    display: grid; grid-template-columns: 1fr 1fr; column-gap: 40px; row-gap: .35em; align-items: start; }
+  #flow .en { grid-column: 1; color: var(--ink); }
+  #flow .de { grid-column: 2; color: var(--muted); font-size: .78em; padding-top: .25em; overflow-wrap: anywhere; }
+  #flow .en { overflow-wrap: anywhere; }
+  #flow .en.provisional, #flow .en .tail { color: color-mix(in srgb, var(--ink) 70%, var(--muted)); }
+  #flow .de .tail { opacity: .75; }
+  #flow .de.provisional { font-style: italic; opacity: .75; }
+  #flow .hdr { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding-bottom: 8px; border-bottom: 1px solid var(--line); margin-bottom: .4em; }
+  #flow .en.hdr { grid-column: 1; } #flow .de.hdr { grid-column: 2; }
+  body[data-focus="1"] #flow .hdr { opacity: 0; }
+  #flow .w { display: inline-block; animation: word .55s cubic-bezier(.2,.7,.2,1) both; }
+  @keyframes word { from { opacity: 0; transform: translateY(6px); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
+  #flow .para { grid-column: 1 / -1; height: .6em; }
+  #flow .think { grid-column: 1 / -1; display: inline-flex; gap: 5px; align-items: center; height: 1.2em; }
+  #flow #flowLiveEn { grid-column: 1; } #flow #flowLive { grid-column: 2; }
+  #flow #flowLiveEn .w:last-child::after { content: ""; display: inline-block; width: 2px; height: .9em; background: var(--accent); vertical-align: -0.1em; margin-left: 1px; animation: blink 1s steps(2) infinite; }
+  #flow .think i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: think 1.2s infinite; }
+  #flow .think i:nth-child(2) { animation-delay: .2s } #flow .think i:nth-child(3) { animation-delay: .4s }
+  @keyframes think { 0%,80%,100% { opacity: .25; transform: scale(.8) } 40% { opacity: 1; transform: scale(1) } }
+  #flow .think[hidden] { display: none; }
+  body[data-mode="flow"] #feed, body[data-mode="flow"] #live { display: none !important; }
+  body[data-mode="cards"] #flow { display: none; }
+  body[data-mode="flow"][data-focus="1"] footer { opacity: 0; pointer-events: none; }
+  body[data-mode="flow"][data-focus="1"] header:not(:hover) { opacity: .15; }
+
+  footer { position: fixed; bottom: 0; left: 0; right: 0; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(14px);
+    border-top: 1px solid var(--line); transition: opacity .3s; }
+  footer .bar { justify-content: space-between; font-size: 13px; color: var(--muted); }
+  footer .stats { display: flex; gap: 18px; font-variant-numeric: tabular-nums; }
+  .jump { position: fixed; right: 24px; bottom: 76px; display: none; }
+  .jump.show { display: inline-flex; }
+  .menu { position: relative; }
+  .menu .dd { position: absolute; right: 0; top: calc(100% + 6px); background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    box-shadow: var(--shadow); padding: 6px; display: none; min-width: 220px; z-index: 20; }
+  .menu.open .dd { display: block; }
+  .dd a, .dd button { display: block; width: 100%; text-align: left; padding: 8px 12px; border-radius: 8px; text-decoration: none; color: var(--ink);
+    background: none; border: 0; cursor: pointer; font-size: 14px; }
+  .dd a:hover, .dd button:hover { background: var(--bg); }
+  .toast { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px;
+    border-radius: 10px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 30; }
+  .toast.show { opacity: 1; }
+  @media (max-width: 640px) { .u { grid-template-columns: 1fr; } .u .t { display: none; } .u .src, .u .meta { grid-column: 1; } :root { --flow: 22px; } #flow { column-gap: 16px; } }
+</style>
+</head>
+<body data-mode="flow">
+<header>
+  <div class="bar">
+    <div class="brand">Live Translate <small id="pair">Deutsch → English</small></div>
+    <div class="status" id="status" data-s="idle"><span class="dot"></span><span id="statusText">Bereit</span></div>
+    <span class="timer" id="timer"></span>
+    <div class="spacer"></div>
+    <div class="seg-ctl" id="modeCtl">
+      <button data-mode="flow" aria-pressed="true" title="Ein durchgehender Text (M)">Fluss</button>
+      <button data-mode="cards" aria-pressed="false" title="Karten mit Original und Zeiten (M)">Karten</button>
+    </div>
+    <label class="toggle" title="Große Schrift, Oberfläche ausblenden (F)"><input type="checkbox" id="focus"> Fokus</label>
+    <button class="btn" id="settingsBtn" title="Einstellungen">Einstellungen</button>
+    <div class="menu" id="exportMenu">
+      <button class="btn" id="exportBtn">Transkript ▾</button>
+      <div class="dd">
+        <a href="/export?format=md" download="transkript.md">Markdown (.md)</a>
+        <a href="/export?format=txt" download="transkript.txt">Text, beide Sprachen</a>
+        <a href="/export?format=en" download="transkript-en.txt">Text, nur Englisch</a>
+        <a href="/export?format=json" download="transkript.json">JSON (mit Zeiten)</a>
+        <button id="copyBtn">In Zwischenablage kopieren</button>
+        <button id="clearBtn">Verlauf löschen</button>
+      </div>
+    </div>
+    <button class="btn primary" id="startBtn" data-running="0">Start</button>
+  </div>
+  <div class="settings" id="settings" hidden>
+    <label class="f">Sprache <select id="lang"></select></label>
+    <label class="f">Übersetzer <select id="translator"></select></label>
+    <label class="f">Kontext <select id="context"><option>0</option><option>1</option><option selected>3</option><option>5</option><option>8</option></select></label>
+    <label class="f">Mikrofon <select id="input"></select></label>
+    <label class="f">Ausgabe <select id="output"></select></label>
+    <label class="f">Stimme <select id="voice"></select></label>
+    <label class="toggle"><input type="checkbox" id="tts" checked> Sprachausgabe</label>
+    <label class="toggle" title="Übersetzt das laufende Segment schon während des Sprechens (grau) und ersetzt es danach durch die endgültige Übersetzung"><input type="checkbox" id="prov" checked> Vorläufige Übersetzung</label>
+    <label class="toggle" title="Setzt zerteilte Sätze nachträglich wieder zusammen und korrigiert Satzzeichen"><input type="checkbox" id="polish" checked> Sätze säubern</label>
+    <label class="f">Schrift <select id="size"><option value="0.8">Klein</option><option value="1" selected>Normal</option><option value="1.25">Groß</option><option value="1.6">Sehr groß</option></select></label>
+    <label class="f">Design <select id="theme"><option value="">System</option><option value="light">Hell</option><option value="dark">Dunkel</option></select></label>
+    <button class="btn" id="demoBtn" title="Spielt data/samples/de_test.wav ab">Demo-Audio</button>
+  </div>
+</header>
+
+<main>
+  <div class="empty" id="empty">
+    Drück <kbd>Start</kbd> oder die <kbd>Leertaste</kbd>, dann erscheint hier die Übersetzung live.<br>
+    <kbd>M</kbd> wechselt zwischen Fluss- und Kartenansicht, <kbd>F</kbd> schaltet den Fokus-Modus.
+  </div>
+  <div id="flow">
+    <div class="en hdr">English</div><div class="de hdr" id="srcHdr">Deutsch</div>
+    <span class="think" id="think" hidden><i></i><i></i><i></i></span>
+    <div class="en provisional" id="flowLiveEn" hidden></div>
+    <div class="de provisional" id="flowLive" hidden></div>
+  </div>
+  <div id="feed"></div>
+  <div class="u live" id="live" hidden><div class="t">live</div><div class="en"><span id="liveEn"></span><span class="cursor"></span></div><div class="src" id="liveText"></div></div>
+</main>
+<button class="btn jump" id="jump">↓ Zum Live-Text</button>
+<footer><div class="bar">
+  <div class="stats"><span id="sCount">0 Äußerungen</span><span id="sLat"></span></div>
+  <span id="saved"></span>
+</div></footer>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const state = { utterances: new Map(), blocks: new Map(), status: 'idle', running: false, startedAt: null, options: null, mode: 'flow', lastT: null };
+let ws, follow = true;
+
+// ---------- websocket ----------
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onmessage = e => handle(JSON.parse(e.data));
+  ws.onclose = () => { setStatus('offline'); setTimeout(connect, 1000); };
+}
+function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
+function handle(m) {
+  if (m.type === 'snapshot') {
+    state.options = m.options; fillOptions();
+    resetViews(); m.utterances.forEach(u => upsert(u)); (m.blocks || []).forEach(b => block(b));
+    setStatus(m.status); if (m.transcript_path) $('saved').textContent = 'Gespeichert: ' + m.transcript_path;
+  } else if (m.type === 'status') setStatus(m.status);
+  else if (m.type === 'utterance') upsert(m.utterance);
+  else if (m.type === 'block') block(m.block);
+  else if (m.type === 'partial') live(m.text);
+  else if (m.type === 'provisional') provisional(m.text);
+  else if (m.type === 'saved' && m.path) { $('saved').textContent = 'Gespeichert: ' + m.path; toast('Transkript gespeichert'); }
+}
+function resetViews() {
+  state.utterances.clear(); state.blocks.clear(); state.lastT = null; $('feed').innerHTML = '';
+  [...$('flow').querySelectorAll('.en:not(.hdr):not(#flowLiveEn), .de:not(.hdr):not(#flowLive), .para')].forEach(e => e.remove()); flowLive('');
+}
+
+// ---------- status ----------
+const labels = { idle: 'Bereit', ready: 'Bereit', listening: 'Hört zu', speaking: 'Spricht …', stopping: 'Beende …', offline: 'Keine Verbindung' };
+function setStatus(s) {
+  state.status = s;
+  const el = $('status'); el.dataset.s = s;
+  let text = labels[s] || s;
+  if (s.startsWith('loading')) text = 'Lade Modelle …';
+  $('statusText').textContent = text;
+  const running = !['idle', 'offline', 'ready'].includes(s) && !s.startsWith('error');
+  state.running = running;
+  $('startBtn').textContent = running ? 'Stop' : 'Start';
+  $('startBtn').dataset.running = running ? '1' : '0';
+  $('startBtn').disabled = s === 'stopping';
+  if (running && !state.startedAt) state.startedAt = Date.now();
+  if (!running) { state.startedAt = null; live(''); }
+  $('demoBtn').disabled = running;
+  think();
+}
+setInterval(() => {
+  if (!state.startedAt) { $('timer').textContent = ''; return; }
+  const s = Math.floor((Date.now() - state.startedAt) / 1000);
+  $('timer').textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}, 500);
+
+// ---------- shared ----------
+function fmt(t) { const s = Math.floor(t); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; }
+function upsert(u) {
+  state.utterances.set(u.idx, u);
+  $('empty').hidden = true;
+  card(u);
+  const b = [...state.blocks.values()].find(b => b.utterance_ids.includes(u.idx));
+  if (b) renderBlock(b); else if (!b && !state.blocks.size) flow(u);
+  stats(); think(); scroll();
+}
+function think() {
+  const pending = [...state.utterances.values()].some(u => !u.skipped && !u.english);
+  const liveShown = !$('flowLive').hidden;
+  $('think').hidden = liveShown || !(pending || state.status === 'speaking');
+  if (!$('think').hidden) { $('flow').insertBefore($('think'), $('flowLiveEn')); }
+}
+function stats() {
+  const us = [...state.utterances.values()].filter(u => u.english);
+  $('sCount').textContent = `${us.length} Äußerung${us.length === 1 ? '' : 'en'}`;
+  const lat = us.filter(u => u.latency_ms).map(u => u.latency_ms);
+  $('sLat').textContent = lat.length ? `Ø Verzögerung ${(lat.reduce((a, b) => a + b, 0) / lat.length / 1000).toFixed(1)} s` : '';
+}
+function scroll() { if (follow) window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }
+window.addEventListener('scroll', () => {
+  const atBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 160;
+  follow = atBottom; $('jump').classList.toggle('show', !atBottom && state.utterances.size > 0);
+});
+$('jump').onclick = () => { follow = true; scroll(); };
+
+// ---------- cards ----------
+function card(u) {
+  let el = document.getElementById('u' + u.idx);
+  if (u.skipped) { if (el) el.remove(); return; }
+  if (!el) {
+    el = document.createElement('div'); el.id = 'u' + u.idx; el.className = 'u';
+    el.innerHTML = `<div class="t"></div><div class="en"></div><div class="src"></div><div class="meta"></div>`;
+    $('feed').appendChild(el);
+    while ($('feed').children.length > 200) $('feed').firstChild.remove();
+  }
+  el.querySelector('.t').textContent = fmt(u.t_session);
+  const en = el.querySelector('.en');
+  if (u.english) { en.textContent = u.english; en.className = 'en'; el.classList.remove('pending'); }
+  else if (u.partial_english) { en.innerHTML = ''; en.append(u.partial_english); const c = document.createElement('span'); c.className = 'cursor'; en.append(c); en.className = 'en partial'; el.classList.remove('pending'); }
+  else { en.textContent = u.source ? 'Übersetze …' : `Erkenne Sprache … (${u.audio_s.toFixed(1)} s)`; el.classList.add('pending'); }
+  el.querySelector('.src').textContent = u.source;
+  const m = [];
+  if (u.asr_ms) m.push(`ASR ${u.asr_ms.toFixed(0)} ms`);
+  if (u.mt_ms) m.push(`Übersetzung ${u.mt_ms.toFixed(0)} ms`);
+  if (u.tts_ms) m.push(`TTS ${u.tts_ms.toFixed(0)} ms`);
+  if (u.latency_ms) m.push(`Verzögerung ${(u.latency_ms / 1000).toFixed(1)} s`);
+  el.querySelector('.meta').textContent = m.join(' · ');
+}
+function live(text) {
+  const el = $('live'); el.hidden = !text; $('liveText').textContent = text;
+  if (!text) $('liveEn').textContent = '';
+  flowLive(text);
+  if (text) { $('empty').hidden = true; scroll(); }
+}
+
+// ---------- flow: rows of English (left) and source (right), words fade in ----------
+function fadeWords(el, text, provisional) {
+  el.classList.toggle('provisional', provisional);
+  const words = text.trim() ? text.trim().split(/\s+/) : [];
+  const shown = JSON.parse(el.dataset.words || '[]');
+  let i = 0; while (i < shown.length && i < words.length && shown[i] === words[i]) i++;
+  const nodes = el.querySelectorAll('.w');
+  for (let k = nodes.length - 1; k >= i; k--) nodes[k].remove();
+  for (let k = i; k < words.length; k++) {
+    const w = document.createElement('span'); w.className = 'w'; w.textContent = words[k] + '\u00a0';
+    el.appendChild(w);
+  }
+  el.dataset.words = JSON.stringify(words);
+}
+function flow(u) {
+  let en = document.getElementById('fe' + u.idx), de = document.getElementById('fd' + u.idx);
+  if (u.skipped) { en?.remove(); de?.remove(); return; }
+  if (!u.source && !u.english && !u.partial_english) return;
+  if (!en) {
+    if (state.lastT !== null && u.t_session - state.lastT > 6) { const p = document.createElement('div'); p.className = 'para'; $('flow').insertBefore(p, $('think')); }
+    state.lastT = u.t_session;
+    en = document.createElement('div'); en.id = 'fe' + u.idx; en.className = 'en';
+    de = document.createElement('div'); de.id = 'fd' + u.idx; de.className = 'de';
+    $('flow').insertBefore(en, $('think')); $('flow').insertBefore(de, $('think'));
+  }
+  fadeWords(de, u.source, false);
+  fadeWords(en, u.english || u.partial_english || '', !u.english);
+}
+function block(b) {
+  state.blocks.set(b.id, b);
+  // fragments now owned by a block lose their standalone rows
+  b.utterance_ids.forEach(i => { document.getElementById('fe' + i)?.remove(); document.getElementById('fd' + i)?.remove(); });
+  renderBlock(b); think(); scroll();
+}
+function mixedWords(el, clean, tail) {
+  // clean text in normal color, not-yet-polished tail in grey; both with word fade-in
+  let c = el.querySelector('.clean'), t = el.querySelector('.tail');
+  if (!c) { c = document.createElement('span'); c.className = 'clean'; t = document.createElement('span'); t.className = 'tail provisional'; el.append(c, t); }
+  fadeWords(c, clean, false); fadeWords(t, tail, true);
+}
+function renderBlock(b) {
+  let en = document.getElementById('be' + b.id), de = document.getElementById('bd' + b.id);
+  if (!en) {
+    const prev = [...state.blocks.values()].filter(x => x.id < b.id).pop();
+    if (prev && b.t_session - prev.t_session > 20) { const p = document.createElement('div'); p.className = 'para'; $('flow').insertBefore(p, $('think')); }
+    en = document.createElement('div'); en.id = 'be' + b.id; en.className = 'en';
+    de = document.createElement('div'); de.id = 'bd' + b.id; de.className = 'de';
+    $('flow').insertBefore(en, $('think')); $('flow').insertBefore(de, $('think'));
+  }
+  const tail = b.utterance_ids.filter(i => i > b.polished_upto).map(i => state.utterances.get(i)).filter(Boolean);
+  const tailEn = tail.map(u => u.english || u.partial_english || '').filter(Boolean).join(' ');
+  const tailDe = b.source_clean ? '' : tail.map(u => u.source || '').filter(Boolean).join(' ');
+  mixedWords(en, b.english_clean, tailEn);
+  mixedWords(de, b.source_clean, tailDe);
+}
+function flowLive(text) {
+  const el = $('flowLive'); el.hidden = !text;
+  if (text) { $('flow').appendChild($('flowLiveEn')); $('flow').appendChild(el); fadeWords(el, text, true); }
+  else { el.innerHTML = ''; el.dataset.words = '[]'; $('flowLiveEn').hidden = true; $('flowLiveEn').innerHTML = ''; $('flowLiveEn').dataset.words = '[]'; $('liveEn').textContent = ''; }
+  think();
+}
+function provisional(text) {
+  const el = $('flowLiveEn');
+  if (!text) { el.hidden = true; el.innerHTML = ''; el.dataset.words = '[]'; $('liveEn').textContent = ''; return; }
+  el.hidden = false; $('flow').appendChild(el); $('flow').appendChild($('flowLive')); fadeWords(el, text, true);
+  $('liveEn').textContent = text; scroll();
+}
+
+// ---------- options / settings ----------
+function fillOptions() {
+  const o = state.options; if (!o) return;
+  const fill = (id, items, sel) => { const s = $(id); if (s.options.length) return; for (const [v, t] of items) s.add(new Option(t, v)); if (sel) s.value = sel; };
+  fill('lang', Object.entries(o.langs), 'de');
+  fill('translator', o.translators.map(t => [t, t]), o.default_translator || 'qwen');
+  fill('voice', o.voices.map(v => [v, v]), 'af_heart');
+  fetch('/devices').then(r => r.json()).then(d => {
+    const fillDev = (id, list) => { const s = $(id); const cur = s.value; s.innerHTML = ''; s.add(new Option('Standard', '')); list.forEach(x => s.add(new Option(x.name + (x.default ? ' (Standard)' : ''), x.id))); s.value = cur; };
+    fillDev('input', d.inputs); fillDev('output', d.outputs);
+  });
+  restore();
+}
+function settings(extra = {}) {
+  const s = {
+    lang: $('lang').value, translator: $('translator').value, context: +$('context').value,
+    tts: $('tts').checked, voice: $('voice').value, provisional: $('prov').checked, polish: $('polish').checked,
+    input_device: $('input').value === '' ? null : +$('input').value,
+    output_device: $('output').value === '' ? null : +$('output').value, ...extra,
+  };
+  localStorage.setItem('lt.settings', JSON.stringify({ ...s, size: $('size').value, theme: $('theme').value, focus: $('focus').checked, mode: state.mode }));
+  return s;
+}
+function restore() {
+  try {
+    const s = JSON.parse(localStorage.getItem('lt.settings') || '{}');
+    for (const k of ['lang', 'translator', 'context', 'voice', 'size', 'theme'])
+      if (s[k] !== undefined && [...$(k).options].some(o => o.value == s[k])) $(k).value = s[k];
+    if (s.tts !== undefined) $('tts').checked = s.tts;
+    if (s.provisional !== undefined) $('prov').checked = s.provisional;
+    if (s.polish !== undefined) $('polish').checked = s.polish;
+    if (s.focus) { $('focus').checked = true; document.body.dataset.focus = '1'; }
+    if (s.mode) setMode(s.mode, false);
+  } catch {}
+  applyLook(); updatePair();
+}
+function applyLook() {
+  const f = +$('size').value || 1;
+  document.documentElement.style.setProperty('--size', (22 * f) + 'px');
+  document.documentElement.style.setProperty('--flow', (30 * f) + 'px');
+  if ($('theme').value) document.documentElement.dataset.theme = $('theme').value; else delete document.documentElement.dataset.theme;
+}
+function updatePair() { const l = $('lang').selectedOptions[0]?.text || ''; $('pair').textContent = `${l} → English`; $('srcHdr').textContent = l; }
+function setMode(m, save = true) {
+  state.mode = m; document.body.dataset.mode = m;
+  $('modeCtl').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === m));
+  if (save) settings(); scroll();
+}
+$('modeCtl').querySelectorAll('button').forEach(b => b.onclick = () => setMode(b.dataset.mode));
+['size', 'theme'].forEach(id => $(id).onchange = () => { applyLook(); settings(); });
+['lang', 'translator', 'context', 'voice', 'tts', 'prov', 'polish', 'input', 'output'].forEach(id => $(id).onchange = () => { settings(); updatePair(); });
+$('focus').onchange = e => { document.body.dataset.focus = e.target.checked ? '1' : ''; settings(); };
+$('settingsBtn').onclick = () => $('settings').hidden = !$('settings').hidden;
+
+// ---------- controls ----------
+function toggle() { if (state.running) send({ cmd: 'stop' }); else { $('settings').hidden = true; send({ cmd: 'start', settings: settings() }); } }
+$('startBtn').onclick = toggle;
+$('demoBtn').onclick = () => { $('settings').hidden = true; send({ cmd: 'start', settings: settings({ file: 'data/samples/de_test.wav', lang: 'de' }) }); };
+$('exportBtn').onclick = e => { e.stopPropagation(); $('exportMenu').classList.toggle('open'); };
+document.addEventListener('click', () => $('exportMenu').classList.remove('open'));
+$('copyBtn').onclick = async () => { const r = await fetch('/export?format=en'); await navigator.clipboard.writeText(await r.text()); toast('Kopiert'); };
+$('clearBtn').onclick = () => { if (state.running) return toast('Erst stoppen'); send({ cmd: 'clear' }); resetViews(); $('empty').hidden = false; stats(); };
+document.addEventListener('keydown', e => {
+  if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
+  if (e.code === 'Space') { e.preventDefault(); toggle(); }
+  if (e.key === 'f' || e.key === 'F') { $('focus').checked = !$('focus').checked; $('focus').onchange({ target: $('focus') }); }
+  if (e.key === 'm' || e.key === 'M') setMode(state.mode === 'flow' ? 'cards' : 'flow');
+});
+let toastT; function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), 1800); }
+
+connect();
+</script>
+</body>
+</html>

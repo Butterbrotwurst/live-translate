@@ -1,0 +1,26 @@
+{
+  "madlad": {
+    "chrF++": 52.53,
+    "BLEU": 16.34,
+    "mean_s": 1.973,
+    "p90_s": 3.608,
+    "n": 100,
+    "context": 0
+  },
+  "translategemma": {
+    "chrF++": 62.12,
+    "BLEU": 33.18,
+    "mean_s": 1.218,
+    "p90_s": 1.637,
+    "n": 100,
+    "context": 0
+  },
+  "qwen": {
+    "chrF++": 62.97,
+    "BLEU": 37.11,
+    "mean_s": 0.8,
+    "p90_s": 1.096,
+    "n": 100,
+    "context": 0
+  }
+}

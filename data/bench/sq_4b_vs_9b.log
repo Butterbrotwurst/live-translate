@@ -1,0 +1,27 @@
+
+=== qwen-4b (Albanian→en, n=50, context=3) ===
+[0] 436ms  "Ne kemi tani minj 4 muajsh që nuk janë diabetikë, ndërsa më parë ishi
+     -> "We have had them for four months who are not diabetic, whereas previously they were diabe
+[1] 773ms  Dr. Ehud Ur, profesor i mjekësisë në Dalhousie University në Halifax, 
+     -> Dr. Ehud Ur, a professor of medicine at Dalhousie University in Halifax, Nova Scotia, and 
+[2] 630ms  Ashtu sikurse disa ekpertë të tjerë, ai është skeptik ndaj kurueshmëri
+     -> Just as some other experts, he is skeptical about the curability of diabetes, given that t
+[25] 500ms  Njoftimi u bë pas një bisede telefonike që pati Trampi me presidentin 
+     -> The announcement came following a phone call between Trump and Turkish President Recep Tay
+--> qwen-4b: {'chrF++': 61.13, 'BLEU': 33.01, 'mean_s': 0.659, 'p90_s': 0.862, 'n': 50, 'context': 3}
+
+=== qwen (Albanian→en, n=50, context=3) ===
+[0] 673ms  "Ne kemi tani minj 4 muajsh që nuk janë diabetikë, ndërsa më parë ishi
+     -> "We now have 4-month-old mice that are not diabetic, whereas previously they were diabetic
+[1] 1249ms  Dr. Ehud Ur, profesor i mjekësisë në Dalhousie University në Halifax, 
+     -> Dr. Ehud Ur, a professor of medicine at Dalhousie University in Halifax, Nova Scotia, and 
+[2] 982ms  Ashtu sikurse disa ekpertë të tjerë, ai është skeptik ndaj kurueshmëri
+     -> Like several other experts, he is skeptical about the curability of diabetes, given that t
+[25] 771ms  Njoftimi u bë pas një bisede telefonike që pati Trampi me presidentin 
+     -> The announcement came following a phone call between Trump and Turkish President Recep Tay
+--> qwen: {'chrF++': 63.58, 'BLEU': 36.21, 'mean_s': 1.049, 'p90_s': 1.346, 'n': 50, 'context': 3}
+
+| model | chrF++ | BLEU | mean s | p90 s |
+|---|---|---|---|---|
+| qwen-4b | 61.13 | 33.01 | 0.659 | 0.862 |
+| qwen | 63.58 | 36.21 | 1.049 | 1.346 |

@@ -1,0 +1,35 @@
+
+=== translategemma (German→en, n=100, context=0) ===
+[0] 1099ms  „Wir haben jetzt 4 Monate alte Mäuse, die Diabetes hatten und jetzt ke
+     -> "We now have mice that were previously diabetic but no longer are," he added.
+[1] 2182ms  Dr. Ehud Ur, Professor für Medizin an der Dalhousie University in Hali
+     -> Dr. Ehud Ur, Professor of Medicine at Dalhousie University in Halifax, Nova Scotia, and Ch
+[2] 1641ms  Wie einige andere Experten zeigte er sich skeptisch, ob es möglich sei
+     -> As with some other experts, he expressed skepticism about the possibility of curing diabet
+[25] 1080ms  Die Ankündigung erfolgte nach einem Telefongespräch von Trump mit dem 
+     -> The announcement followed a telephone conversation between President Donald Trump and Turk
+[50] 1196ms  Die Studiengruppe zum Irak stellte heute um 12:00 Uhr GMT ihren Berich
+     -> The study group on Iraq presented its report today at 12:00 GMT.
+[75] 1453ms  Laut dem aktuellen Bulletin deuteten die Messungen des Meeresspiegels 
+     -> According to the latest bulletin, sea level measurements indicated that a tsunami had been
+--> translategemma: {'chrF++': 64.1, 'BLEU': 35.43, 'mean_s': 1.637, 'p90_s': 2.203, 'n': 100, 'context': 0}
+
+=== qwen (German→en, n=100, context=0) ===
+[0] 920ms  „Wir haben jetzt 4 Monate alte Mäuse, die Diabetes hatten und jetzt ke
+     -> He added, "We now have 4-month-old mice that had diabetes and no longer have it."
+[1] 1549ms  Dr. Ehud Ur, Professor für Medizin an der Dalhousie University in Hali
+     -> Dr. Ehud Ur, Professor of Medicine at Dalhousie University in Halifax, Nova Scotia, and Ch
+[2] 1283ms  Wie einige andere Experten zeigte er sich skeptisch, ob es möglich sei
+     -> Like several other experts, he expressed skepticism about whether it is possible to cure d
+[25] 796ms  Die Ankündigung erfolgte nach einem Telefongespräch von Trump mit dem 
+     -> The announcement came after a phone call between Trump and Turkish President Recep Tayyip 
+[50] 585ms  Die Studiengruppe zum Irak stellte heute um 12:00 Uhr GMT ihren Berich
+     -> The Study Group on Iraq presented its report today at 12:00 GMT.
+[75] 821ms  Laut dem aktuellen Bulletin deuteten die Messungen des Meeresspiegels 
+     -> According to the latest bulletin, the sea level measurements indicated that a tsunami had 
+--> qwen: {'chrF++': 65.05, 'BLEU': 38.07, 'mean_s': 0.962, 'p90_s': 1.435, 'n': 100, 'context': 0}
+
+| model | chrF++ | BLEU | mean s | p90 s |
+|---|---|---|---|---|
+| translategemma | 64.1 | 35.43 | 1.637 | 2.203 |
+| qwen | 65.05 | 38.07 | 0.962 | 1.435 |

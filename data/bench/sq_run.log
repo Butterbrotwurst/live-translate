@@ -1,0 +1,51 @@
+
+=== madlad (Albanian→en, n=100, context=0) ===
+[0] 855ms  "Ne kemi tani minj 4 muajsh që nuk janë diabetikë, ndërsa më parë ishi
+     -> "We have now 4 months that are not diabetic, while before they were diabetic", he added.
+[1] 2564ms  Dr. Ehud Ur, profesor i mjekësisë në Dalhousie University në Halifax, 
+     -> Dr. Dr., Dr. Mr. Dr, Dr, D-Dr. Dr Ehud Ur, professor of medicine at Dalhousie University i
+[2] 2967ms  Ashtu sikurse disa ekpertë të tjerë, ai është skeptik ndaj kurueshmëri
+     -> Like other experts, he is sceptic about the effectiveness of diabetes, considering that th
+[25] 1811ms  Njoftimi u bë pas një bisede telefonike që pati Trampi me presidentin 
+     -> The announcement was made after a telephone conversation between Trump and Turkish Preside
+[50] 1638ms  Grupi i studimit mbi Irakun paraqiti raportin e tij sot në 12:00 me or
+     -> The Irac Research Group on Iraq has delivered its report today at 12:00 GMT (GMT). Today t
+[75] 2217ms  Sipas buletinit më të fundit, të dhënat për nivelin e detit tregonin s
+     -> According to the latest bulletin, data on water level indicated that a tsunami had occurre
+--> madlad: {'chrF++': 52.53, 'BLEU': 16.34, 'mean_s': 1.973, 'p90_s': 3.608, 'n': 100, 'context': 0}
+
+=== translategemma (Albanian→en, n=100, context=0) ===
+[0] 989ms  "Ne kemi tani minj 4 muajsh që nuk janë diabetikë, ndërsa më parë ishi
+     -> "We currently have four-month-old mice that are not diabetic, while previously they were d
+[1] 1719ms  Dr. Ehud Ur, profesor i mjekësisë në Dalhousie University në Halifax, 
+     -> Dr. Ehud Ur, a professor of medicine at Dalhousie University in Halifax, Nova Scotia, and 
+[2] 1326ms  Ashtu sikurse disa ekpertë të tjerë, ai është skeptik ndaj kurueshmëri
+     -> As with several other experts, he is skeptical about the possibility of curing diabetes, p
+[25] 774ms  Njoftimi u bë pas një bisede telefonike që pati Trampi me presidentin 
+     -> The announcement followed a phone conversation between Donald Trump and Turkish President 
+[50] 957ms  Grupi i studimit mbi Irakun paraqiti raportin e tij sot në 12:00 me or
+     -> The study group on Iraq presented its report today at 12:00 GMT (Greenwich Mean Time).
+[75] 1237ms  Sipas buletinit më të fundit, të dhënat për nivelin e detit tregonin s
+     -> According to the latest bulletin, data regarding sea levels indicated that a tsunami had b
+--> translategemma: {'chrF++': 62.12, 'BLEU': 33.18, 'mean_s': 1.218, 'p90_s': 1.637, 'n': 100, 'context': 0}
+
+=== qwen (Albanian→en, n=100, context=0) ===
+[0] 636ms  "Ne kemi tani minj 4 muajsh që nuk janë diabetikë, ndërsa më parë ishi
+     -> "We now have 4-month-old mice that are not diabetic, whereas previously they were diabetic
+[1] 1194ms  Dr. Ehud Ur, profesor i mjekësisë në Dalhousie University në Halifax, 
+     -> Dr. Ehud Ur, professor of medicine at Dalhousie University in Halifax, Nova Scotia, and di
+[2] 890ms  Ashtu sikurse disa ekpertë të tjerë, ai është skeptik ndaj kurueshmëri
+     -> Like several other experts, he is skeptical about the curability of diabetes, given that t
+[25] 547ms  Njoftimi u bë pas një bisede telefonike që pati Trampi me presidentin 
+     -> The announcement was made following a phone call between Trump and Turkish President Recep
+[50] 643ms  Grupi i studimit mbi Irakun paraqiti raportin e tij sot në 12:00 me or
+     -> The study group on Iraq presented its report today at 12:00 GMT (Greenwich Mean Time).
+[75] 806ms  Sipas buletinit më të fundit, të dhënat për nivelin e detit tregonin s
+     -> According to the latest bulletin, data on sea level indicated that a tsunami had formed. N
+--> qwen: {'chrF++': 62.97, 'BLEU': 37.11, 'mean_s': 0.8, 'p90_s': 1.096, 'n': 100, 'context': 0}
+
+| model | chrF++ | BLEU | mean s | p90 s |
+|---|---|---|---|---|
+| madlad | 52.53 | 16.34 | 1.973 | 3.608 |
+| translategemma | 62.12 | 33.18 | 1.218 | 1.637 |
+| qwen | 62.97 | 37.11 | 0.8 | 1.096 |
