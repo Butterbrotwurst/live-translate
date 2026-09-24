@@ -27,5 +27,11 @@ Lokales Live-Übersetzungstool (Albanisch/Deutsch → Englisch) für Apple Silic
   `tts.fix_espeak_data_path()` kopiert die Daten dann unter einen kurzen Pfad — nicht entfernen.
 - UI-Design (`static/index.html`): nur dunkel, Schwarz mit Weiß als Akzent, alle Buttons voll gerundet.
   Oben nur der Start-Knopf (mittig, solange kein Text da ist, dann oben) und der Einstellungs-Knopf; alles
-  andere gehört ins Einstellungs-Overlay. Kein Text, der nicht wirklich nötig ist; Animationen dezent
-  (Wörter blenden per Opacity + leichtem Blur ein, keine Bewegung).
+  andere gehört ins Einstellungs-Overlay. Während einer Session: großer Knopf = Stummschalten, kleiner
+  Sekundär-Knopf daneben = Stop. Kein Text, der nicht wirklich nötig ist; Animationen dezent.
+- Fluss-Ansicht: `paint()` baut die Zeilen aus dem State und gleicht sie wortweise über Zeilen hinweg mit
+  dem Bildschirm ab (LCS). Gebliebene Wörter behalten ihr Element und gleiten per FLIP an die neue Stelle,
+  nur neue blenden ein. Wort-Animationen deshalb nur per Web Animations API — CSS-Animationen und
+  -Transitions starten neu, sobald ein Wort in eine andere Zeile wandert. `hold()` verhindert, dass ein
+  neu startender Stream Wörter wegnimmt und gleich wieder bringt; Platzhalter überbrücken die Lücke
+  zwischen Live-Transkript und finaler Spracherkennung.

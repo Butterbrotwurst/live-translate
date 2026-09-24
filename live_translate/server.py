@@ -70,6 +70,7 @@ class Session:
             },
             "transcript_path": str(self.last_transcript) if self.last_transcript else None,
             "setup": self.setup,
+            "muted": bool(p and p.muted),
         }
 
     # -- control -----------------------------------------------------------
@@ -246,6 +247,10 @@ async def ws(websocket: WebSocket) -> None:
                 session.start(msg.get("settings", {}))
             elif cmd == "stop":
                 session.request_stop()
+            elif cmd == "mute":
+                if session.pipeline:
+                    session.pipeline.muted = bool(msg.get("muted"))
+                    session.emit({"type": "muted", "muted": session.pipeline.muted})
             elif cmd == "setup":
                 if session.setup and session.setup["phase"] == "error":
                     session.run_setup()

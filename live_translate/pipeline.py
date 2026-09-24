@@ -135,6 +135,7 @@ class Pipeline:
     partial_every_s: float = 1.2
     provisional: bool = True
     polish: bool = True
+    muted: bool = False  # set from the UI: the mic is ignored, a file pauses
     block_max_fragments: int = 8
     block_gap_s: float = 6.0
 
@@ -438,6 +439,7 @@ class Pipeline:
         silent_s = 0.0
         heard_anything = False
         last_level = 0.0
+        was_muted = False
         with sd.InputStream(
             samplerate=SAMPLE_RATE, channels=1, dtype="float32", blocksize=VAD_CHUNK, device=device, callback=cb
         ):
@@ -447,6 +449,15 @@ class Pipeline:
                     chunk = audio_q.get(timeout=0.2)
                 except queue.Empty:
                     continue
+                if self.muted:
+                    # what was said up to the click still gets translated, then the mic is ignored
+                    if not was_muted:
+                        was_muted = True
+                        self.flush()
+                        last_level = 0.0
+                        self.on_level(0.0)
+                    continue
+                was_muted = False
                 peak = float(np.max(np.abs(chunk))) if chunk.size else 0.0
                 if peak > 0.0:
                     heard_anything = True
@@ -472,6 +483,8 @@ class Pipeline:
         for i in range(0, n, VAD_CHUNK):
             if stop is not None and stop.is_set():
                 break
+            while self.muted and not (stop is not None and stop.is_set()):
+                time.sleep(0.05)  # a muted file pauses; it would otherwise play on unheard
             self.feed_chunk(audio[i : i + VAD_CHUNK])
             if realtime:
                 time.sleep(VAD_CHUNK / SAMPLE_RATE)

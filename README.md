@@ -72,10 +72,13 @@ uv run live-translate-ui
 ```
 
 Öffnet http://127.0.0.1:8765 im Browser. Solange nichts auf dem Bildschirm steht, sitzt der
-Start-Knopf in der Mitte; sobald Text erscheint, gleitet er nach oben. Leertaste startet/stoppt.
+Start-Knopf in der Mitte; sobald Text erscheint, gleitet er nach oben. Während einer Session ist der
+große Knopf **Stummschalten** (das Gesagte bis zum Klick wird noch übersetzt, ein Demo pausiert),
+der kleine daneben **Stop**. Leertaste = großer Knopf, `Esc` = Stop.
 
-- **Fluss** (Standard): links Englisch, rechts das Original, zeilenweise ausgerichtet, jedes neue
-  Wort blendet weich ein. Während du sprichst, läuft rechts das Live-Transkript mit und links eine
+- **Fluss** (Standard): links Englisch, rechts das Original, zeilenweise ausgerichtet. Nur wirklich
+  neue Wörter blenden ein; wird Text umformuliert oder zu Sätzen zusammengesetzt, gleiten die
+  verbliebenen Wörter an ihre neue Stelle. Während du sprichst, läuft rechts das Live-Transkript mit und links eine
   **vorläufige Übersetzung** (gedimmt). Nach Segmentende ersetzt die endgültige Übersetzung beides.
   Die endgültige läuft immer mit vollem Segment und Kontext, die vorläufige kostet also keine Genauigkeit.
   Absatz nach mehr als 6 s Pause.
