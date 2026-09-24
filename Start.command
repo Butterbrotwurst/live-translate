@@ -1,6 +1,6 @@
 #!/bin/bash
-# Doppelklick-Start. Beim ersten Mal wird alles eingerichtet (uv, Python 3.13,
-# Bibliotheken, Sprachmodelle), danach startet die Oberfläche im Browser.
+# Doppelklick-Start. Beim ersten Mal werden uv, Python 3.13 und die Bibliotheken
+# eingerichtet, dann startet die Oberfläche im Browser und lädt dort die Sprachmodelle.
 # Braucht weder Homebrew noch die Xcode Command Line Tools: uv bringt Python mit,
 # und alle Bibliotheken kommen als fertige Wheels (PortAudio steckt in sounddevice,
 # espeak-ng in espeakng-loader).
@@ -49,12 +49,8 @@ step "Python und Bibliotheken …"
 "$UV" sync --frozen \
   || die "Die Bibliotheken konnten nicht installiert werden (siehe oben). Nochmal doppelklicken setzt fort."
 
-# ---- Modelle -----------------------------------------------------------------
-step "Sprachmodelle …"
-.venv/bin/python scripts/setup_models.py \
-  || die "Ein Modell konnte nicht geladen werden (siehe oben). Nochmal doppelklicken setzt fort."
-
 # ---- Server ------------------------------------------------------------------
+# missing models are fetched by the server itself, with the progress on the page
 step "Oberfläche startet …"
 # the venv entry point directly, not `uv run`: closing this window must reach the server itself
 .venv/bin/live-translate-ui --no-browser --port "$PORT" &

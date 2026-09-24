@@ -15,8 +15,8 @@ Internet für die Ersteinrichtung. Homebrew, Xcode oder die Command Line Tools b
 1. **Holen.** Am einfachsten mit [GitHub Desktop](https://desktop.github.com) (bringt git selbst mit):
    *File → Clone Repository* → `live-translate` → z. B. nach `~/Developer/live-translate`.
 2. **Doppelklick auf `Start.command`.** Beim ersten Mal installiert es `uv`, Python 3.13 und alle
-   Bibliotheken und lädt die Sprachmodelle (8–15 GB, 20–60 Minuten). Danach öffnet sich der Browser.
-   Ab dem zweiten Start dauert das ein paar Sekunden.
+   Bibliotheken (ein paar Minuten, im Terminal), dann öffnet sich der Browser und lädt die Sprachmodelle
+   (8–15 GB, 20–60 Minuten, Fortschritt im Knopf). Ab dem zweiten Start dauert das ein paar Sekunden.
 3. **Mikrofon erlauben**, wenn macOS fragt (die Freigabe gilt für *Terminal*). Weißer Knopf oder
    Leertaste startet, die Einstellungen sitzen oben rechts.
 
@@ -44,13 +44,15 @@ Xcode noch eine Apple-ID.
 
 ```bash
 uv sync
-uv run python scripts/setup_models.py   # alle Modelle + Albanisch-Whisper nach MLX konvertieren
 uv run live-translate-ui
 ```
 
-`scripts/setup_models.py` ist idempotent: fertige Downloads hinterlassen einen Stempel in
-`models/.stamps`, abgebrochene setzen beim nächsten Lauf fort. Das albanische Whisper-Fine-Tune
-(`Flutra/whisper-large-v3-turbo-sq-v2`) wird dabei nach `models/` konvertiert; von Hand geht das so:
+Fehlen Modelle, lädt der Server sie beim Start selbst (`live_translate/setup.py`): Fortschritt,
+Restzeit und Fehler zeigt der Knopf im Browser, vorher wird der freie Speicher geprüft. Fertige
+Downloads hinterlassen einen Stempel in `models/.stamps`, abgebrochene setzen beim nächsten Start
+fort. `uv run python scripts/setup_models.py` macht dasselbe im Terminal, ohne UI. Das albanische
+Whisper-Fine-Tune (`Flutra/whisper-large-v3-turbo-sq-v2`) wird dabei nach `models/` konvertiert;
+von Hand geht das so:
 
 ```bash
 uv run python scripts/convert_whisper.py \
@@ -78,7 +80,8 @@ Start-Knopf in der Mitte; sobald Text erscheint, gleitet er nach oben. Leertaste
   Die endgültige läuft immer mit vollem Segment und Kontext, die vorläufige kostet also keine Genauigkeit.
   Absatz nach mehr als 6 s Pause.
 - **Details** (`M`): pro Äußerung Original, Übersetzung, Zeitstempel und Laufzeiten (beim Überfahren).
-- Der Halo um den Knopf zeigt den Mikrofonpegel; während Modelle laden, dreht sich ein Ring.
+- Der Halo um den Knopf zeigt den Mikrofonpegel; während Modelle in den Speicher laden, dreht sich
+  ein Ring. Beim ersten Start füllt sich der Ring mit dem Download, die Prozentzahl steht im Knopf.
 - Sprachausgabe läuft parallel über das gewählte Ausgabegerät (AirPods/Kopfhörer empfohlen, sonst hört
   das Mikrofon die Übersetzung mit).
 

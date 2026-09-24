@@ -137,4 +137,11 @@ else
   prog 1.0
 fi
 
+# the server looks for models/.stamps at startup and would otherwise check every repo online
+# again (or, offline, wait for the network) -- everything above is in place, so say so
+mkdir -p "$SRC/models/.stamps"
+for r in "$MT_REPO" "$HELPER_REPO" mlx-community/Kokoro-82M-bf16 "$DE_ASR_REPO"; do
+  touch "$SRC/models/.stamps/${r//\//--}"
+done
+
 printf '@@READY\n'

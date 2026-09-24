@@ -68,6 +68,22 @@
     opacity: 0; pointer-events: none; transition: opacity .3s; }
   #orb[data-state="busy"] .spin { opacity: 1; animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  /* first run: models download, the ring fills and the button shows the percentage */
+  .ring { position: absolute; inset: -7px; width: calc(100% + 14px); height: calc(100% + 14px); transform: rotate(-90deg);
+    opacity: 0; pointer-events: none; overflow: visible; transition: opacity .4s; }
+  .ring circle { fill: none; stroke-width: 1.6; }
+  .ring .track { stroke: rgba(255,255,255,.1); }
+  .ring .bar { stroke: #fff; stroke-linecap: round; stroke-dasharray: 0 100; transition: stroke-dasharray .8s var(--ease); }
+  #orb[data-state="setup"]:not([data-indet="1"]) .ring { opacity: 1; }
+  #orb[data-state="setup"][data-indet="1"] .spin { opacity: 1; animation: spin 1s linear infinite; }
+  #orb[data-state="setup"] #cta { background: var(--fill); color: var(--ink); box-shadow: none; animation: none; }
+  #cta .i-retry, #cta .pct { display: none; }
+  #orb[data-state="setup"] #cta svg, #orb[data-state="retry"] #cta svg { display: none; }
+  #orb[data-state="retry"] #cta .i-retry { display: block; }
+  #orb[data-state="setup"]:not([data-indet="1"]) #cta .pct { display: block; }
+  .pct { font-size: 21px; font-weight: 500; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .pct small { font-size: .55em; font-weight: 400; margin-left: 1px; color: var(--dim); }
+  body[data-has-text="1"] .pct { font-size: 11px; }
   #hint { position: absolute; left: 50%; top: calc(100% + 24px); transform: translateX(-50%); width: max-content;
     max-width: min(420px, 80vw); text-align: center; color: var(--dim); font-size: 13px; line-height: 1.5; letter-spacing: .01em;
     pointer-events: none; transition: top .8s var(--ease), left .8s var(--ease), transform .8s var(--ease); }
@@ -196,9 +212,12 @@
 <div id="orb" data-state="idle">
   <span class="halo"></span>
   <span class="spin"></span>
+  <svg class="ring" viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="48" pathLength="100"/><circle class="bar" id="ringBar" cx="50" cy="50" r="48" pathLength="100"/></svg>
   <button id="cta" aria-label="Start">
     <svg class="i-mic" viewBox="0 0 24 24"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/></svg>
     <svg class="i-stop" viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="2.5" fill="currentColor" stroke="none"/></svg>
+    <svg class="i-retry" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4"/></svg>
+    <span class="pct" id="pct"></span>
   </button>
   <div id="hint"></div>
 </div>
@@ -266,7 +285,7 @@
 
 <script>
 const $ = id => document.getElementById(id);
-const state = { utterances: new Map(), blocks: new Map(), status: 'idle', running: false, options: null, mode: 'flow', lastT: null };
+const state = { utterances: new Map(), blocks: new Map(), status: 'idle', running: false, options: null, mode: 'flow', lastT: null, setup: null };
 let ws, follow = true;
 
 const LANG_LABEL = { de: 'Deutsch', sq: 'Albanisch' };
@@ -288,7 +307,7 @@ function handle(m) {
   if (m.type === 'snapshot') {
     state.options = m.options; fillOptions();
     resetViews(); m.utterances.forEach(u => upsert(u)); (m.blocks || []).forEach(b => block(b));
-    setStatus(m.status);
+    state.setup = m.setup || null; setStatus(m.status);
     requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove('boot')));
   } else if (m.type === 'status') setStatus(m.status);
   else if (m.type === 'utterance') upsert(m.utterance);
@@ -296,6 +315,7 @@ function handle(m) {
   else if (m.type === 'partial') live(m.text);
   else if (m.type === 'provisional') provisional(m.text);
   else if (m.type === 'level') level(m.level);
+  else if (m.type === 'setup') { state.setup = m.setup; setStatus(state.status); }
   else if (m.type === 'saved' && m.path) toast('Transkript gespeichert');
 }
 function resetViews() {
@@ -322,9 +342,26 @@ function loadingText(s) {
 }
 // sqrt makes quiet speech visible; the halo is a presence indicator, not a VU meter
 function level(v) { $('orb').style.setProperty('--lvl', Math.min(1, Math.sqrt(v) * 1.3).toFixed(3)); }
+// model download on the first run; null once every model is in place
+const gbs = b => (b / 1e9).toFixed(1).replace('.', ',') + ' GB';
+function eta(s) {
+  if (s == null || !isFinite(s)) return '';
+  const m = Math.round(s / 60);
+  return m < 1 ? 'noch < 1 Min.' : m < 90 ? `noch ${m} Min.` : `noch ${Math.round(m / 60)} Std.`;
+}
+function setupView(p) {
+  if (p.phase === 'error') return { view: 'retry', hint: p.error, err: true };
+  if (p.phase === 'convert') return { view: 'setup', indet: true, hint: 'Albanisch-Modell wird eingerichtet …' };
+  if (p.phase === 'download' && p.total) return {
+    view: 'setup', pct: Math.min(99, Math.floor(p.done / p.total * 100)),
+    hint: ['Sprachmodelle werden geladen', eta(p.eta_s)].filter(Boolean).join(' · '),
+    title: `${gbs(p.done)} von ${gbs(p.total)} · ${p.label}`,
+  };
+  return { view: 'setup', indet: true, hint: p.phase === 'download' ? 'Sprachmodelle werden geladen …' : 'Sprachmodelle werden geprüft …' };
+}
 function setStatus(s) {
   state.status = s;
-  const err = s.startsWith('error');
+  let err = s.startsWith('error');
   // "ready" only ever shows up between loading and listening, so it counts as running
   const running = !['idle', 'offline'].includes(s) && !err;
   state.running = running;
@@ -335,12 +372,18 @@ function setStatus(s) {
   else if (s === 'ready' || s === 'stopping') view = 'busy';
   else if (running) view = 'live';
   const orb = $('orb');
+  const sv = state.setup && s !== 'offline' ? setupView(state.setup) : null;
+  if (sv) {
+    ({ view, hint } = sv); err = !!sv.err;
+    orb.dataset.indet = sv.indet ? '1' : '';
+    if (sv.pct != null) { $('pct').innerHTML = `${sv.pct}<small>%</small>`; $('ringBar').style.strokeDasharray = `${sv.pct} 100`; }
+  }
   orb.dataset.state = view; orb.dataset.err = err ? '1' : '';
-  $('hint').textContent = hint; $('hint').title = hint;
-  $('cta').setAttribute('aria-label', running ? 'Stop' : 'Start');
-  $('cta').disabled = s === 'stopping' || s === 'offline';
+  $('hint').textContent = hint; $('hint').title = sv?.title || hint;
+  $('cta').setAttribute('aria-label', view === 'retry' ? 'Erneut versuchen' : running ? 'Stop' : 'Start');
+  $('cta').disabled = s === 'stopping' || s === 'offline' || view === 'setup';
   if (!running) { level(0); live(''); }
-  $('demoBtn').disabled = running;
+  $('demoBtn').disabled = running || !!state.setup;
   think();
 }
 
@@ -564,6 +607,7 @@ $('sheet').onclick = e => { if (e.target === $('sheet')) sheet(false); };
 
 // ---------- controls ----------
 function toggle() {
+  if (state.setup) { if (state.setup.phase === 'error') send({ cmd: 'setup' }); return; }
   if (state.running) send({ cmd: 'stop' });
   else { if (sheetOpen()) sheet(false); send({ cmd: 'start', settings: settings() }); }
 }

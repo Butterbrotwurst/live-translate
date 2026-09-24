@@ -4,8 +4,10 @@ Lokales Live-Übersetzungstool (Albanisch/Deutsch → Englisch) für Apple Silic
 
 - Pipeline: `live_translate/pipeline.py` (Threads: Segmenter → ASR → MT → TTS), Terminal-CLI in `app.py`, Web-UI in `server.py` (FastAPI + WebSocket) mit `static/index.html`. Start: `uv run live-translate-ui`; Browser-Preview über `.claude/launch.json`.
 - Modelle/Sprachprofile zentral in `live_translate/config.py`. Albanisch-Whisper liegt lokal in `models/` (gitignored, siehe README für die Konvertierung).
-- Einrichtung für Einsteiger: `Start.command` (Doppelklick) installiert uv nach `~/.local/bin`, macht `uv sync`,
-  lädt per `scripts/setup_models.py` alle Modelle (Stempel in `models/.stamps`) und startet den Server.
+- Einrichtung für Einsteiger: `Start.command` (Doppelklick) installiert uv nach `~/.local/bin`, macht `uv sync`
+  und startet den Server. Fehlende Modelle lädt der Server selbst (`live_translate/setup.py`, Stempel in
+  `models/.stamps`), Fortschritt per WebSocket (`type: setup`) im Knopf. Bytes werden über einen tqdm-Hook
+  gezählt, nicht über die Ordnergröße: das Xet-Backend schreibt große Dateien erst am Ende in den Cache.
   Braucht weder Homebrew noch die Command Line Tools — neue Abhängigkeiten deshalb nur als fertige Wheels.
   `packaging/` baut dagegen die `.app` für reine Nutzer; deren `bootstrap.sh` überschreibt den Code bei
   jedem Start, zum Entwickeln ungeeignet.

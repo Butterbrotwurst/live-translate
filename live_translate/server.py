@@ -13,6 +13,7 @@ import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
+from . import setup as model_setup
 from .config import PROFILES, TRANSLATORS, TTS_VOICE, default_translator
 from .pipeline import Pipeline, Utterance
 
@@ -32,6 +33,9 @@ class Session:
         self.status = "idle"
         self.settings: dict = {}
         self.last_transcript: Path | None = None
+        # latest model-setup progress; None once every model is in place
+        self.setup: dict | None = None
+        self.setup_thread: threading.Thread | None = None
 
     # -- broadcasting from worker threads ---------------------------------
     def emit(self, msg: dict) -> None:
@@ -65,11 +69,12 @@ class Session:
                 "voices": VOICES,
             },
             "transcript_path": str(self.last_transcript) if self.last_transcript else None,
+            "setup": self.setup,
         }
 
     # -- control -----------------------------------------------------------
     def start(self, s: dict) -> None:
-        if self.thread and self.thread.is_alive():
+        if (self.thread and self.thread.is_alive()) or self.setup:
             return
         self.settings = s
         self.stop.clear()
@@ -93,6 +98,40 @@ class Session:
         self.pipeline = p
         self.thread = threading.Thread(target=self._run, args=(p, s), daemon=True)
         self.thread.start()
+
+    # -- model setup -----------------------------------------------------
+    def run_setup(self) -> None:
+        if self.setup_thread and self.setup_thread.is_alive():
+            return
+        self.setup = model_setup.Progress().to_dict()
+        self.emit({"type": "setup", "setup": self.setup})
+        self.setup_thread = threading.Thread(target=self._setup, daemon=True)
+        self.setup_thread.start()
+
+    def _setup(self) -> None:
+        log = {"label": None, "tenth": -1}
+
+        def report(p: model_setup.Progress) -> None:
+            self.setup = None if p.phase == "done" else p.to_dict()
+            self.emit({"type": "setup", "setup": self.setup})
+            # a few plain lines for the terminal window -- the page has the real progress
+            if p.phase == "download" and p.label != log["label"]:
+                log["label"] = p.label
+                print(f"  Lade {p.label} …", flush=True)
+            if p.phase == "download" and p.total and p.done * 10 // p.total > log["tenth"]:
+                log["tenth"] = p.done * 10 // p.total
+                print(f"  {log['tenth'] * 10} %  ({model_setup.gb(p.done)} von {model_setup.gb(p.total)})", flush=True)
+            if p.phase == "convert":
+                print("  Albanisch-Modell wird umgewandelt …", flush=True)
+            if p.phase == "done":
+                print("  Modelle bereit.", flush=True)
+
+        try:
+            model_setup.run(report)
+        except BaseException as e:
+            traceback.print_exc()
+            self.setup = model_setup.Progress("error", error=str(e) or type(e).__name__).to_dict()
+            self.emit({"type": "setup", "setup": self.setup})
 
     def _on_status(self, status: str) -> None:
         self.status = status
@@ -207,6 +246,9 @@ async def ws(websocket: WebSocket) -> None:
                 session.start(msg.get("settings", {}))
             elif cmd == "stop":
                 session.request_stop()
+            elif cmd == "setup":
+                if session.setup and session.setup["phase"] == "error":
+                    session.run_setup()
             elif cmd == "clear":
                 if session.pipeline and not (session.thread and session.thread.is_alive()):
                     session.pipeline.utterances.clear()
@@ -226,6 +268,11 @@ def main() -> None:
     if not args.no_browser:
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
     print(f"live-translate UI: {url}")
+    # missing models are fetched right away, with the progress on the page -- not on the
+    # first "Start", where the UI would sit on "Lade Übersetzer …" for half an hour
+    if model_setup.todo():
+        print("  Sprachmodelle fehlen und werden jetzt geladen (Fortschritt im Browser).", flush=True)
+        session.run_setup()
     uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning")
 
 
