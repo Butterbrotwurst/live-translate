@@ -72,17 +72,18 @@ uv run live-translate-ui
 ```
 
 Öffnet http://127.0.0.1:8765 im Browser. Solange nichts auf dem Bildschirm steht, sitzt der
-Start-Knopf in der Mitte; sobald Text erscheint, gleitet er nach oben. Während einer Session ist der
-große Knopf **Stummschalten** (das Gesagte bis zum Klick wird noch übersetzt, ein Demo pausiert),
-der kleine daneben **Stop**. Leertaste = großer Knopf, `Esc` = Stop.
+Start-Knopf ▶ in der Mitte; sobald Text erscheint, gleitet er nach oben. Beim Start wird derselbe
+Knopf zum kleinen **Stop** ■ daneben, und in der Mitte erscheint das Mikrofon zum **Stummschalten**
+(das Gesagte bis zum Klick wird noch übersetzt, ein Demo pausiert). Tasten: Leertaste = Start/Stop,
+`M` = stumm, `Esc` = Stop, `D` = Detail-Ansicht.
 
-- **Fluss** (Standard): links Englisch, rechts das Original, zeilenweise ausgerichtet. Nur wirklich
-  neue Wörter blenden ein; wird Text umformuliert oder zu Sätzen zusammengesetzt, gleiten die
-  verbliebenen Wörter an ihre neue Stelle. Während du sprichst, läuft rechts das Live-Transkript mit und links eine
+- **Fluss** (Standard): links Englisch, rechts das Original, zeilenweise ausgerichtet. Solange eine
+  Zeile streamt, wächst sie nur am Ende. Erst wenn Text fertig ist (finale Übersetzung, Einsortieren
+  in den Satz, Säubern), gleiten die verbliebenen Wörter an ihre neue Stelle. Während du sprichst, läuft rechts das Live-Transkript mit und links eine
   **vorläufige Übersetzung** (gedimmt). Nach Segmentende ersetzt die endgültige Übersetzung beides.
   Die endgültige läuft immer mit vollem Segment und Kontext, die vorläufige kostet also keine Genauigkeit.
   Absatz nach mehr als 6 s Pause.
-- **Details** (`M`): pro Äußerung Original, Übersetzung, Zeitstempel und Laufzeiten (beim Überfahren).
+- **Details** (`D`): pro Äußerung Original, Übersetzung, Zeitstempel und Laufzeiten (beim Überfahren).
 - Der Halo um den Knopf zeigt den Mikrofonpegel; während Modelle in den Speicher laden, dreht sich
   ein Ring. Beim ersten Start füllt sich der Ring mit dem Download, die Prozentzahl steht im Knopf.
 - Sprachausgabe läuft parallel über das gewählte Ausgabegerät (AirPods/Kopfhörer empfohlen, sonst hört

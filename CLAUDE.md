@@ -27,11 +27,13 @@ Lokales Live-Übersetzungstool (Albanisch/Deutsch → Englisch) für Apple Silic
   `tts.fix_espeak_data_path()` kopiert die Daten dann unter einen kurzen Pfad — nicht entfernen.
 - UI-Design (`static/index.html`): nur dunkel, Schwarz mit Weiß als Akzent, alle Buttons voll gerundet.
   Oben nur der Start-Knopf (mittig, solange kein Text da ist, dann oben) und der Einstellungs-Knopf; alles
-  andere gehört ins Einstellungs-Overlay. Während einer Session: großer Knopf = Stummschalten, kleiner
-  Sekundär-Knopf daneben = Stop. Kein Text, der nicht wirklich nötig ist; Animationen dezent.
+  andere gehört ins Einstellungs-Overlay. Start und Stop sind derselbe Knopf (▶ groß in der Mitte, während
+  einer Session ■ klein daneben); das Mikrofon erscheint nur während einer Session und schaltet nur stumm.
+  Kein Text, der nicht wirklich nötig ist; Animationen dezent.
 - Fluss-Ansicht: `paint()` baut die Zeilen aus dem State und gleicht sie wortweise über Zeilen hinweg mit
-  dem Bildschirm ab (LCS). Gebliebene Wörter behalten ihr Element und gleiten per FLIP an die neue Stelle,
-  nur neue blenden ein. Wort-Animationen deshalb nur per Web Animations API — CSS-Animationen und
-  -Transitions starten neu, sobald ein Wort in eine andere Zeile wandert. `hold()` verhindert, dass ein
-  neu startender Stream Wörter wegnimmt und gleich wieder bringt; Platzhalter überbrücken die Lücke
-  zwischen Live-Transkript und finaler Spracherkennung.
+  dem Bildschirm ab. Streamende Zeilen ändern sich nur an Ort und Stelle und wachsen am Ende — nie
+  Wörter mittendrin einfügen, sonst landet der neueste Text in der Mitte. Umsortieren (LCS über Zeilen,
+  Wörter gleiten per FLIP) erst, wenn Text final ist. Wort-Animationen nur per Web Animations API —
+  CSS-Animationen und -Transitions starten neu, sobald ein Wort in eine andere Zeile wandert. `hold()`
+  lässt einen neu startenden, noch kürzeren Stream warten, bis er den alten Text eingeholt hat;
+  Platzhalter überbrücken die Lücke zwischen Live-Transkript und finaler Spracherkennung.

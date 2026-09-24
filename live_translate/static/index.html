@@ -45,29 +45,30 @@
   #orb { position: fixed; z-index: 12; left: 50%; top: 50%; width: 96px; height: 96px; transform: translate(-50%, -50%);
     --lvl: 0; transition: top .8s var(--ease), width .8s var(--ease), height .8s var(--ease); }
   body[data-has-text="1"] #orb { top: 38px; width: 44px; height: 44px; }
-  #cta { position: absolute; inset: 0; border: 0; padding: 0; border-radius: 50%; background: #fff; color: #000; cursor: pointer;
-    display: grid; place-items: center; box-shadow: 0 0 32px rgba(255,255,255,.10);
-    transition: background .35s, color .35s, box-shadow .6s, transform .3s var(--ease); }
-  #cta:hover { transform: scale(1.04); }
-  #cta:active { transform: scale(.95); }
-  #cta:disabled { cursor: default; transform: none; }
-  #cta svg { width: 36%; height: 36%; display: none; }
-  #orb:not([data-state="setup"]):not([data-state="retry"]):not([data-muted="1"]) .i-mic { display: block; }
-  #orb[data-muted="1"] .i-mute { display: block; }
+  /* one button starts and stops: large in the middle while idle; once a session runs it shrinks to
+     the side as the secondary stop, and the microphone (mute) takes the middle */
+  #cta, #micBtn { position: absolute; border: 0; padding: 0; border-radius: 50%; cursor: pointer; display: grid; place-items: center; }
+  #cta { left: 0; top: 0; width: 100%; height: 100%; background: #fff; color: #000; box-shadow: 0 0 32px rgba(255,255,255,.10);
+    transition: left .7s var(--ease), top .7s var(--ease), width .7s var(--ease), height .7s var(--ease),
+      background .35s, color .35s, box-shadow .6s, transform .3s var(--ease); }
+  #orb[data-running="1"] #cta { left: calc(100% + 18px); top: calc(50% - 24px); width: 48px; height: 48px;
+    background: var(--fill-2); color: var(--ink); box-shadow: none; }
+  body[data-has-text="1"] #orb[data-running="1"] #cta { left: calc(100% + 12px); top: calc(50% - 16px); width: 32px; height: 32px; }
+  #micBtn { inset: 0; background: #fff; color: #000; opacity: 0; transform: scale(.5); pointer-events: none;
+    transition: opacity .4s, transform .6s var(--ease), background .35s, color .35s; }
+  #orb[data-running="1"] #micBtn { opacity: 1; transform: none; pointer-events: auto; }
+  #cta:hover, #orb[data-running="1"] #micBtn:hover { transform: scale(1.04); }
+  #cta:active, #orb[data-running="1"] #micBtn:active { transform: scale(.95); }
+  #cta:disabled, #micBtn:disabled { cursor: default; transform: none !important; }
+  #cta svg, #micBtn svg { width: 36%; height: 36%; display: none; }
+  #orb:not([data-running="1"]):not([data-state="setup"]):not([data-state="retry"]) .i-play { display: block; }
+  #orb[data-running="1"] .i-stop { display: block; }
+  #orb:not([data-muted="1"]) .i-mic, #orb[data-muted="1"] .i-mute { display: block; }
   #orb[data-state="idle"] #cta { animation: glow 4.5s ease-in-out infinite; }
   @keyframes glow { 50% { box-shadow: 0 0 60px rgba(255,255,255,.22); } }
-  #orb[data-state="busy"] #cta, #orb[data-state="off"] #cta, #orb[data-muted="1"] #cta { background: var(--fill-2); color: var(--ink); box-shadow: none; }
-  #orb[data-state="busy"] #cta, #orb[data-state="off"] #cta { color: var(--dim); }
-  /* stop: the secondary action, smaller, beside the orb and only while a session runs */
-  .stop { position: absolute; top: 50%; left: calc(100% + 18px); width: 48px; height: 48px; opacity: 0; pointer-events: none;
-    transform: translateY(-50%) scale(.6); background: var(--fill-2);
-    transition: opacity .35s, transform .45s var(--ease), left .8s var(--ease), width .8s var(--ease), height .8s var(--ease), background .2s; }
-  .stop svg { width: 15px; height: 15px; }
-  .stop:active { transform: translateY(-50%) scale(.92); }
-  #orb[data-running="1"] .stop { opacity: 1; pointer-events: auto; transform: translateY(-50%); }
-  #orb[data-running="1"] .stop:active { transform: translateY(-50%) scale(.92); }
-  body[data-has-text="1"] .stop { left: calc(100% + 12px); width: 32px; height: 32px; }
-  body[data-has-text="1"] .stop svg { width: 11px; height: 11px; }
+  #orb[data-state="off"] #cta { background: var(--fill-2); color: var(--dim); box-shadow: none; }
+  #orb[data-state="busy"] #micBtn { background: var(--fill-2); color: var(--dim); }
+  #orb[data-muted="1"] #micBtn { background: var(--fill-2); color: var(--ink); }
   body[data-has-text="1"] #orb #cta { animation: none; box-shadow: none; }
   /* input level as a soft halo; it only exists while listening */
   .halo { position: absolute; inset: 0; border-radius: 50%; background: #fff; opacity: 0; pointer-events: none;
@@ -222,13 +223,16 @@
   <span class="halo"></span>
   <span class="spin"></span>
   <svg class="ring" viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="48" pathLength="100"/><circle class="bar" id="ringBar" cx="50" cy="50" r="48" pathLength="100"/></svg>
-  <button id="cta" aria-label="Start">
+  <button id="micBtn" aria-label="Stummschalten" disabled>
     <svg class="i-mic" viewBox="0 0 24 24"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/></svg>
     <svg class="i-mute" viewBox="0 0 24 24"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3M4 4l16 16"/></svg>
+  </button>
+  <button id="cta" aria-label="Start">
+    <svg class="i-play" viewBox="0 0 24 24"><path d="M8.5 5.6v12.8a1 1 0 0 0 1.53.85l10.1-6.4a1 1 0 0 0 0-1.7l-10.1-6.4A1 1 0 0 0 8.5 5.6Z" fill="currentColor" stroke="none"/></svg>
+    <svg class="i-stop" viewBox="0 0 24 24"><rect x="5.5" y="5.5" width="13" height="13" rx="3" fill="currentColor" stroke="none"/></svg>
     <svg class="i-retry" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4"/></svg>
     <span class="pct" id="pct"></span>
   </button>
-  <button class="icon-btn stop" id="stopBtn" aria-label="Stop"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="3" fill="currentColor" stroke="none"/></svg></button>
   <div id="hint"></div>
 </div>
 
@@ -390,12 +394,13 @@ function setStatus(s) {
     if (sv.pct != null) { $('pct').innerHTML = `${sv.pct}<small>%</small>`; $('ringBar').style.strokeDasharray = `${sv.pct} 100`; }
   }
   orb.dataset.state = view; orb.dataset.err = err ? '1' : '';
-  orb.dataset.running = running && s !== 'stopping' ? '1' : '';
+  orb.dataset.running = running ? '1' : '';
   orb.dataset.muted = view === 'live' && state.muted ? '1' : '';
   $('hint').textContent = hint; $('hint').title = sv?.title || hint;
-  $('cta').setAttribute('aria-label', view === 'retry' ? 'Erneut versuchen'
-    : view === 'live' ? (state.muted ? 'Mikrofon einschalten' : 'Stummschalten') : 'Start');
-  $('cta').disabled = ['stopping', 'offline'].includes(s) || ['setup', 'busy'].includes(view);
+  $('cta').setAttribute('aria-label', view === 'retry' ? 'Erneut versuchen' : running ? 'Stop' : 'Start');
+  $('cta').disabled = ['stopping', 'offline'].includes(s) || view === 'setup';
+  $('micBtn').setAttribute('aria-label', state.muted ? 'Mikrofon einschalten' : 'Stummschalten');
+  $('micBtn').disabled = view !== 'live';
   if (!running) { level(0); live(''); }
   $('demoBtn').disabled = running || !!state.setup;
   think();
@@ -408,9 +413,11 @@ function upsert(u) {
   if (!arrived.has(u.idx)) arrived.set(u.idx, performance.now());
   card(u); hasText(); think(); schedulePaint();
 }
+// the dots only stand in for speech that shows no text at all yet -- dimmed text already says
+// "in progress"
 function think() {
-  const pending = [...state.utterances.values()].some(u => !u.skipped && !u.english);
-  $('think').hidden = document.body.dataset.hasText !== '1' || !!state.live || !(pending || state.status === 'speaking');
+  const waiting = [...state.utterances.values()].some(u => !u.skipped && !u.source && !placeholders.has(u.idx));
+  $('think').hidden = document.body.dataset.hasText !== '1' || !!state.live || !(waiting || state.status === 'speaking');
 }
 function scroll() { if (follow) window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }
 window.addEventListener('scroll', () => {
@@ -462,13 +469,14 @@ function live(text) {
 }
 
 // ---------- flow: English left, source right ----------
-// Every update rebuilds the rows from the state and reconciles them with the screen, word by
-// word across rows. A word that is still there keeps its element and glides to its new place
-// (FLIP), so fragments folding into a polished sentence move instead of blinking; only words
-// that are really new fade in, and dropped ones fade out where they stood.
+// Every update rebuilds the rows from the state and reconciles them with the screen. A row that
+// is still streaming only ever grows at its end: words change where they stand and new ones are
+// appended, nothing slides. Rearranging waits until text is final -- the finished translation,
+// fragments folding into a sentence block, the polish -- and then kept words glide to their new
+// place (FLIP) instead of blinking, new ones fade in, dropped ones fade out where they stood.
 const COLS = ['en', 'de'];
 const EASE = 'cubic-bezier(.22,.8,.2,1)';
-const SETTLE_MS = 900;
+const SETTLE_MS = 1500;
 const placeholders = new Map();  // utterance idx -> {src, en} it was heard as live
 const arrived = new Map();       // utterance idx -> when the page first saw it
 const shown = new Map();         // row key -> {en, de} words as last displayed
@@ -526,14 +534,12 @@ function align(a, b) {
   return head.concat(tail);
 }
 
-// A stream never makes words vanish just to bring them back: every provisional translation
-// starts over at its first word, and the live transcript gets revised as it grows. Until the
-// row settles, words already on screen after the last one the stream has reached stay put.
+// Every provisional translation starts over at its first word, and the final one streams in over
+// the provisional text it replaces. Shown as it comes, the row would shrink and grow back on every
+// restart; so a stream that is shorter than what is on screen waits until it has caught up (or
+// the row has been quiet for SETTLE_MS) -- the text just stays where it is meanwhile.
 function hold(prev, target) {
-  if (!prev?.length || target.length >= prev.length) return target;
-  const pairs = align(prev.map(w => norm(w.t)), target.map(w => norm(w.t)));
-  const rest = pairs.length ? prev.slice(pairs[pairs.length - 1][0] + 1) : prev.slice(target.length);
-  return target.concat(rest.map(w => ({ t: w.t, dim: true })));
+  return prev?.length && target.length < prev.length ? prev : target;
 }
 
 function display(key, col, cell, now) {
@@ -570,7 +576,7 @@ function ghost(el, pos) {
 function paint() {
   const now = performance.now();
   const rows = buildRows().map(r => {
-    const out = { key: r.key, gap: !!r.gap, caret: !!r.caret };
+    const out = { key: r.key, gap: !!r.gap, caret: !!r.caret, final: { en: r.en.final, de: r.de.final } };
     for (const c of COLS) out[c] = display(r.key, c, r[c], now);
     out.sig = [out.gap, out.caret, sigOf(out.en), sigOf(out.de)].join('|');
     return out;
@@ -595,11 +601,34 @@ function paint() {
     return { key: r.key, sig: r.sig, cells, words: { en: [], de: [] } };
   });
 
-  // FIRST: where every word of the changed rows is now
+  // FIRST: where every word of the changed rows is now, before anything moves
+  const pos = new Map();
+  for (const r of old) for (const c of COLS) for (const el of r.words[c]) pos.set(el, at(el));
+  const byKey = new Map(old.map(r => [r.key, r]));
   const moved = [];
   for (const c of COLS) {
-    const had = old.flatMap(r => r.words[c]).map(el => ({ el, pos: at(el) }));
-    const want = fresh.flatMap((r, k) => r[c].map(w => ({ k, w })));
+    // still streaming: same elements, in place
+    const inPlace = fresh.map(r => byKey.has(r.key) && !r.final[c]);
+    fresh.forEach((r, k) => {
+      if (!inPlace[k]) return;
+      const els = byKey.get(r.key).words[c];
+      r[c].forEach((w, j) => {
+        let el = els[j];
+        if (!el) el = newWord(w.t);
+        else if (el.dataset.t !== w.t) {
+          setWord(el, w.t);
+          el.animate([{ opacity: .35 }, { opacity: 1 }], { duration: 320, easing: 'ease-out' });
+        }
+        el.classList.toggle('dim', w.dim);
+        next[k].cells[c].appendChild(el); next[k].words[c].push(el);
+      });
+      els.slice(r[c].length).forEach(el => ghost(el, pos.get(el)));
+    });
+    // everything else is matched across rows: a fragment's words fly into its block, a
+    // rewritten sentence reorders itself
+    const streaming = new Set(fresh.filter((r, k) => inPlace[k]).map(r => r.key));
+    const had = old.filter(r => !streaming.has(r.key)).flatMap(r => r.words[c]).map(el => ({ el, pos: pos.get(el) }));
+    const want = fresh.flatMap((r, k) => inPlace[k] ? [] : r[c].map(w => ({ k, w })));
     const pairs = align(had.map(h => norm(h.el.dataset.t)), want.map(x => norm(x.w.t)));
     const from = new Map(pairs.map(([a, b]) => [b, a])), kept = new Set(pairs.map(([a]) => a));
     had.forEach((h, a) => { if (!kept.has(a)) ghost(h.el, h.pos); });
@@ -741,21 +770,22 @@ $('closeBtn').onclick = () => sheet(false);
 $('sheet').onclick = e => { if (e.target === $('sheet')) sheet(false); };
 
 // ---------- controls ----------
-// the orb is the primary action: start, and while running mute; stop is the smaller button
-function primary() {
+// one button starts and stops; the microphone in the middle only mutes
+function startStop() {
   if (state.setup) { if (state.setup.phase === 'error') send({ cmd: 'setup' }); return; }
-  if (!state.running) {
-    state.muted = false;
-    if (sheetOpen()) sheet(false);
-    send({ cmd: 'start', settings: settings() });
-  } else if ($('orb').dataset.state === 'live') {
-    state.muted = !state.muted; setStatus(state.status);  // the server confirms with "muted"
-    send({ cmd: 'mute', muted: state.muted });
-  }
+  if (state.running) return stop();
+  state.muted = false;
+  if (sheetOpen()) sheet(false);
+  send({ cmd: 'start', settings: settings() });
 }
 function stop() { if (state.running) send({ cmd: 'stop' }); }
-$('cta').onclick = primary;
-$('stopBtn').onclick = stop;
+function toggleMute() {
+  if ($('orb').dataset.state !== 'live') return;
+  state.muted = !state.muted; setStatus(state.status);  // the server confirms with "muted"
+  send({ cmd: 'mute', muted: state.muted });
+}
+$('cta').onclick = startStop;
+$('micBtn').onclick = toggleMute;
 $('demoBtn').onclick = () => { sheet(false); state.muted = false; send({ cmd: 'start', settings: settings({ file: 'data/samples/de_test.wav', lang: 'de' }) }); };
 $('copyBtn').onclick = async () => {
   try { const r = await fetch('/export?format=en'); await navigator.clipboard.writeText(await r.text()); toast('Kopiert'); }
@@ -767,8 +797,9 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') return stop();
   // buttons handle Space themselves; the sheet keeps its keys to itself
   if (sheetOpen() || ['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON', 'A'].includes(e.target.tagName)) return;
-  if (e.code === 'Space') { e.preventDefault(); primary(); }
-  if (e.key === 'm' || e.key === 'M') setMode(state.mode === 'flow' ? 'cards' : 'flow');
+  if (e.code === 'Space') { e.preventDefault(); startStop(); }
+  if (e.key === 'm' || e.key === 'M') toggleMute();
+  if (e.key === 'd' || e.key === 'D') setMode(state.mode === 'flow' ? 'cards' : 'flow');
 });
 let toastT; function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), 1800); }
 
