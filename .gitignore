@@ -13,6 +13,7 @@ data/flores200_dataset/
 data/bench/*.hyp.txt
 *.wav
 *.aiff
+!data/samples/de_test.wav
 transcripts/
 
 # packaged app

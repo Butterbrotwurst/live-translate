@@ -7,14 +7,50 @@ Alles läuft offline auf dem Mac: Spracherkennung, kontextbewusste Übersetzung 
 Mikrofon → Silero VAD → Whisper (mlx-whisper) → LLM-Übersetzung (mlx-lm) → Kokoro TTS (mlx-audio) → Kopfhörer
 ```
 
-## Setup
+## Schnellstart
+
+**Voraussetzungen:** Mac mit Apple-Chip (M1 oder neuer), mindestens 16 GB RAM, 12–18 GB frei,
+Internet für die Ersteinrichtung. Homebrew, Xcode oder die Command Line Tools braucht es **nicht**.
+
+1. **Holen.** Am einfachsten mit [GitHub Desktop](https://desktop.github.com) (bringt git selbst mit):
+   *File → Clone Repository* → `live-translate` → z. B. nach `~/Developer/live-translate`.
+2. **Doppelklick auf `Start.command`.** Beim ersten Mal installiert es `uv`, Python 3.13 und alle
+   Bibliotheken und lädt die Sprachmodelle (8–15 GB, 20–60 Minuten). Danach öffnet sich der Browser.
+   Ab dem zweiten Start dauert das ein paar Sekunden.
+3. **Mikrofon erlauben**, wenn macOS fragt (die Freigabe gilt für *Terminal*). Weißer Knopf oder
+   Leertaste startet, die Einstellungen sitzen oben rechts.
+
+Das Terminal-Fenster ist der Server: offen lassen, solange übersetzt wird; schließen beendet alles.
+
+<details>
+<summary>macOS blockiert <code>Start.command</code> („Apple konnte nicht überprüfen …“)</summary>
+
+Das passiert nur, wenn das Projekt als ZIP aus dem Browser kam (geklonte Dateien sind nicht betroffen).
+Einmalig: *Systemeinstellungen → Datenschutz & Sicherheit* → ganz unten **Trotzdem öffnen**, dann
+nochmal doppelklicken. Oder im Terminal: `xattr -dr com.apple.quarantine <Projektordner>`.
+</details>
+
+### Mit Claude weiterentwickeln
+
+Ordner in der Claude-App (Tab *Code*) oder mit `claude` im Terminal öffnen. `CLAUDE.md` gibt Claude
+den Überblick über Architektur, Modelle und Fallstricke, `RESEARCH.md` die Begründungen dahinter.
+Die Browser-Vorschau ist in `.claude/launch.json` eingerichtet.
+
+Claude arbeitet mit git. Fehlen die Command Line Tools, fragt macOS beim ersten git-Aufruf, ob sie
+installiert werden sollen: **Installieren** klicken, das dauert ein paar Minuten und braucht weder
+Xcode noch eine Apple-ID.
+
+### Manuell (ohne `Start.command`)
 
 ```bash
-brew install espeak-ng ffmpeg portaudio   # espeak-ng braucht Kokoro, ffmpeg braucht --file
 uv sync
+uv run python scripts/setup_models.py   # alle Modelle + Albanisch-Whisper nach MLX konvertieren
+uv run live-translate-ui
 ```
 
-Das albanische Whisper-Fine-Tune muss einmal nach MLX konvertiert werden (≈1,5 GB, dauert ~1 Min):
+`scripts/setup_models.py` ist idempotent: fertige Downloads hinterlassen einen Stempel in
+`models/.stamps`, abgebrochene setzen beim nächsten Lauf fort. Das albanische Whisper-Fine-Tune
+(`Flutra/whisper-large-v3-turbo-sq-v2`) wird dabei nach `models/` konvertiert; von Hand geht das so:
 
 ```bash
 uv run python scripts/convert_whisper.py \
@@ -22,7 +58,8 @@ uv run python scripts/convert_whisper.py \
   --mlx-path models/whisper-large-v3-turbo-sq-v2-mlx --dtype float16
 ```
 
-Alle anderen Modelle werden beim ersten Start automatisch von Hugging Face geladen (~12 GB insgesamt).
+PortAudio (in `sounddevice`) und espeak-ng (in `espeakng-loader`) kommen als Wheels mit. `ffmpeg`
+braucht nur, wer mit `--file` etwas anderes als unkomprimiertes WAV abspielen will.
 
 ## Benutzung
 
@@ -32,20 +69,23 @@ Alle anderen Modelle werden beim ersten Start automatisch von Hugging Face gelad
 uv run live-translate-ui
 ```
 
-Öffnet http://127.0.0.1:8765 im Browser. **Start** (oder Leertaste), fertig.
+Öffnet http://127.0.0.1:8765 im Browser. Solange nichts auf dem Bildschirm steht, sitzt der
+Start-Knopf in der Mitte; sobald Text erscheint, gleitet er nach oben. Leertaste startet/stoppt.
 
-- **Fluss-Modus** (Standard): links Englisch, rechts das Original, zeilenweise ausgerichtet, jedes neue
+- **Fluss** (Standard): links Englisch, rechts das Original, zeilenweise ausgerichtet, jedes neue
   Wort blendet weich ein. Während du sprichst, läuft rechts das Live-Transkript mit und links eine
-  **vorläufige Übersetzung** (grau). Nach Segmentende ersetzt die endgültige Übersetzung beides.
+  **vorläufige Übersetzung** (gedimmt). Nach Segmentende ersetzt die endgültige Übersetzung beides.
   Die endgültige läuft immer mit vollem Segment und Kontext, die vorläufige kostet also keine Genauigkeit.
   Absatz nach mehr als 6 s Pause.
-- **Karten-Modus** (`M`): pro Äußerung Original, Übersetzung, Zeitstempel und Laufzeiten.
-- **Fokus** (`F`): große Schrift, Kopf- und Fußzeile blenden sich aus, bis man mit der Maus hinfährt.
+- **Details** (`M`): pro Äußerung Original, Übersetzung, Zeitstempel und Laufzeiten (beim Überfahren).
+- Der Halo um den Knopf zeigt den Mikrofonpegel; während Modelle laden, dreht sich ein Ring.
 - Sprachausgabe läuft parallel über das gewählte Ausgabegerät (AirPods/Kopfhörer empfohlen, sonst hört
   das Mikrofon die Übersetzung mit).
-Beim Stoppen wird das Transkript automatisch als Markdown in `transcripts/` gespeichert;
-über **Transkript ▾** gibt es Markdown, Text (beide Sprachen oder nur Englisch), JSON und Kopieren.
-„Demo-Audio“ in den Einstellungen spielt das deutsche Testaudio durch die ganze Pipeline.
+
+Alles Weitere steckt im Einstellungs-Overlay (oben rechts, `Esc` schließt): Sprache, Übersetzer,
+Geräte, Stimme, Ansicht, Schriftgröße, Export (Markdown, Text, nur Englisch, JSON, Kopieren),
+„Demo abspielen“ (spielt das deutsche Testaudio durch die ganze Pipeline) und „Verlauf löschen“.
+Beim Stoppen wird das Transkript automatisch als Markdown in `transcripts/` gespeichert.
 
 ### Terminal
 
@@ -152,6 +192,10 @@ endgültiges Segment wartet. Abschaltbar in den Einstellungen („Vorläufige Ü
   (deshalb Satzsplitting + Repetition-Penalty).
 
 ## Weitergabe als App
+
+Für Leute, die das Tool nur **benutzen** wollen. Zum Weiterentwickeln taugt die App nicht: Der Code
+liegt versteckt in `~/Library/Application Support/LiveTranslate/src` und wird bei jedem Start neu
+überschrieben. Dafür ist `Start.command` da (siehe Schnellstart).
 
 `packaging/` baut ein `LiveTranslate.app`-Bundle (~21 MB), das sich beim ersten
 Start selbst einrichtet — Python 3.13 und venv landen in
