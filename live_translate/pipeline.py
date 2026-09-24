@@ -455,7 +455,7 @@ class Pipeline:
                     if silent_s >= self.SILENCE_LIMIT_S:
                         raise RuntimeError(
                             "Kein Mikrofonsignal. Bitte in den Systemeinstellungen unter "
-                            "„Datenschutz & Sicherheit → Mikrofon“ den Zugriff für Live Translate erlauben."
+                            "„Datenschutz & Sicherheit → Mikrofon“ den Zugriff für Live Translate erlauben (bzw. für Terminal, wenn über Start.command gestartet)."
                         )
                 # a coarse level, so the UI can show that something is actually arriving
                 level = round(min(peak, 1.0), 3)
