@@ -37,3 +37,8 @@ Lokales Live-Übersetzungstool (Albanisch/Deutsch → Englisch) für Apple Silic
   CSS-Animationen und -Transitions starten neu, sobald ein Wort in eine andere Zeile wandert. `hold()`
   lässt einen neu startenden, noch kürzeren Stream warten, bis er den alten Text eingeholt hat;
   Platzhalter überbrücken die Lücke zwischen Live-Transkript und finaler Spracherkennung.
+- Utterances und Blöcke zählen pro Session ab 1; der Server schickt `sid` mit, die Seite schlüsselt
+  `sid.idx`. Nie nur nach `idx` schlüsseln — sonst überschreibt eine neue Session die obersten Zeilen.
+- Fluss ist unten verankert (`main` mit `justify-content: flex-end`); wächst er, gleitet die ganze
+  Spalte hoch (`flow._lift`). Der Orb unter dem Text ist thinking-orbs (MIT), vendored unter
+  `static/vendor/` und über `/static` ausgeliefert — kein CDN, das Tool muss offline laufen.

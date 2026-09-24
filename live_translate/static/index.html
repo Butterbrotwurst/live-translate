@@ -103,7 +103,10 @@
   #orb[data-err="1"] #hint { color: var(--err); }
 
   /* ---- text ---- */
-  main { max-width: 1120px; margin: 0 auto; padding: 108px 32px 30vh; }
+  /* text is anchored at the bottom like a chat: the newest line sits just above the orb, and older
+     text is pushed up and under the top bar */
+  main { max-width: 1120px; margin: 0 auto; padding: 108px 32px 10vh; min-height: 100vh;
+    display: flex; flex-direction: column; justify-content: flex-end; }
   #flow { position: relative; font-size: min(var(--flow), 3.4vw); line-height: 1.42; letter-spacing: -.015em; text-wrap: pretty;
     display: grid; grid-template-columns: 1fr 1fr; column-gap: 56px; row-gap: .4em; align-items: start; }
   #flow .en { grid-column: 1; color: var(--ink); font-weight: 500; overflow-wrap: anywhere; }
@@ -117,11 +120,12 @@
   #flow .en.caret .w:last-child::after { content: ""; display: inline-block; width: 2px; height: .9em; margin-left: 2px;
     vertical-align: -0.1em; border-radius: 1px; background: var(--ink); animation: caret 1.1s ease-in-out infinite; }
   @keyframes caret { 50% { opacity: 0; } }
-  #flow .think { grid-column: 1 / -1; display: inline-flex; gap: 6px; align-items: center; height: 1.2em; }
-  #flow .think i { width: 6px; height: 6px; border-radius: 50%; background: var(--ink); opacity: .15; animation: think 1.4s infinite; }
-  #flow .think i:nth-child(2) { animation-delay: .2s; } #flow .think i:nth-child(3) { animation-delay: .4s; }
-  @keyframes think { 40% { opacity: .7; } }
-  #flow .think[hidden] { display: none; }
+  /* the thinking orb (github.com/Jakubantalik/thinking-orbs, MIT) under the newest line while listening;
+     its slot always keeps its height, so fading it never shifts the text */
+  #flow .think { grid-column: 1 / -1; height: 40px; margin-top: .45em; }
+  #flow .think canvas { display: block; width: 40px; height: 40px; opacity: 0; transform: scale(.8);
+    transition: opacity .6s var(--ease), transform .6s var(--ease); }
+  #flow .think.on canvas { opacity: 1; transform: none; }
   body[data-mode="flow"] #feed, body[data-mode="flow"] #live { display: none !important; }
   body[data-mode="cards"] #flow { display: none; }
 
@@ -242,7 +246,7 @@
 
 <main>
   <div id="flow">
-    <span class="think" id="think" hidden><i></i><i></i><i></i></span>
+    <div class="think" id="think"><canvas id="orbCanvas" role="img" aria-label="Hört zu"></canvas></div>
   </div>
   <div id="feed"></div>
   <div class="u live" id="live" hidden><div class="t">live</div><div class="en"><span id="liveEn"></span><span class="cursor"></span></div><div class="src" id="liveText"></div></div>
@@ -295,9 +299,14 @@
 
 <div class="toast" id="toast"></div>
 
+<script type="module">
+  // thinking-orbs engine, vendored (MIT); the page script below only needs these two entry points
+  import { resolvePreset, MODE_DRAWS } from '/static/vendor/thinking-orbs-engine.js';
+  window.orbEngine = { resolvePreset, MODE_DRAWS };
+</script>
 <script>
 const $ = id => document.getElementById(id);
-const state = { utterances: new Map(), blocks: new Map(), status: 'idle', running: false, options: null, mode: 'flow', setup: null, muted: false, live: '', prov: '' };
+const state = { utterances: new Map(), blocks: new Map(), status: 'idle', running: false, options: null, mode: 'flow', setup: null, muted: false, live: '', prov: '', sid: 0 };
 let ws, follow = true;
 
 const LANG_LABEL = { de: 'Deutsch', sq: 'Albanisch' };
@@ -318,12 +327,13 @@ function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); el
 function handle(m) {
   if (m.type === 'snapshot') {
     state.options = m.options; fillOptions();
-    resetViews(); m.utterances.forEach(u => upsert(u)); (m.blocks || []).forEach(b => block(b));
+    resetViews(); state.sid = m.sid || 0;
+    m.utterances.forEach(u => upsert(u, state.sid)); (m.blocks || []).forEach(b => block(b, state.sid));
     state.setup = m.setup || null; state.muted = !!m.muted; setStatus(m.status);
     requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove('boot')));
   } else if (m.type === 'status') setStatus(m.status);
-  else if (m.type === 'utterance') upsert(m.utterance);
-  else if (m.type === 'block') block(m.block);
+  else if (m.type === 'utterance') upsert(m.utterance, m.sid);
+  else if (m.type === 'block') block(m.block, m.sid);
   else if (m.type === 'partial') live(m.text);
   else if (m.type === 'provisional') provisional(m.text);
   else if (m.type === 'level') level(m.level);
@@ -408,16 +418,50 @@ function setStatus(s) {
 
 // ---------- shared ----------
 function fmt(t) { const s = Math.floor(t); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; }
-function upsert(u) {
-  state.utterances.set(u.idx, u);
-  if (!arrived.has(u.idx)) arrived.set(u.idx, performance.now());
+// utterances and blocks are keyed "session.index": every session counts from 1 again
+const ukey = u => `${u.sid}.${u.idx}`;
+function upsert(u, sid) {
+  u.sid = sid ?? state.sid; state.sid = Math.max(state.sid, u.sid);
+  state.utterances.set(ukey(u), u);
+  if (!arrived.has(ukey(u))) arrived.set(ukey(u), performance.now());
   card(u); hasText(); think(); schedulePaint();
 }
-// the dots only stand in for speech that shows no text at all yet -- dimmed text already says
-// "in progress"
+// the orb shows while the session listens; it turns faster while speech comes in or is translated
 function think() {
-  const waiting = [...state.utterances.values()].some(u => !u.skipped && !u.source && !placeholders.has(u.idx));
-  $('think').hidden = document.body.dataset.hasText !== '1' || !!state.live || !(waiting || state.status === 'speaking');
+  const listening = $('orb').dataset.state === 'live' && !state.muted;
+  const busy = !!state.live || state.status === 'speaking' || [...state.utterances.values()].some(u => !u.skipped && !u.english);
+  orbSet(document.body.dataset.hasText === '1' && listening, busy);
+}
+
+// ---------- thinking orb ----------
+// "listening" from thinking-orbs: a waveform rolling through dotted rings, drawn with the tuned
+// 64 px preset and scaled into the slot. The phase is integrated, so a change of pace never jumps.
+const orbAnim = { on: false, fast: false, raf: 0, phase: 0, rate: .45, last: 0, offAt: 0, preset: null };
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+function orbSet(on, fast) {
+  orbAnim.fast = fast;
+  if (orbAnim.on && !on) orbAnim.offAt = performance.now();
+  orbAnim.on = on;
+  $('think').classList.toggle('on', on);
+  if (on && !orbAnim.raf) { orbAnim.last = performance.now(); orbAnim.raf = requestAnimationFrame(orbFrame); }
+}
+function orbFrame(now) {
+  const eng = window.orbEngine, c = $('orbCanvas'), a = orbAnim;
+  if (eng && c.clientWidth) {
+    const { mode, speed, opts } = a.preset ||= eng.resolvePreset('listening', 64);
+    const px = Math.round(c.clientWidth * Math.min(2, devicePixelRatio || 1));
+    if (c.width !== px) c.width = c.height = px;
+    a.rate += ((a.fast ? 1 : .45) - a.rate) * .04;  // ease between calm and busy
+    a.phase = reducedMotion.matches ? .6 * speed : a.phase + Math.min(.1, (now - a.last) / 1000) * speed * a.rate;
+    const ctx = c.getContext('2d');
+    ctx.setTransform(px / 64, 0, 0, px / 64, 0, 0);
+    ctx.clearRect(0, 0, 64, 64);
+    eng.MODE_DRAWS[mode](ctx, 64, a.phase, true, opts);
+  }
+  a.last = now;
+  // keep drawing through the fade-out, then rest; reduced motion gets a single still frame
+  const more = (a.on || now - a.offAt < 700) && !(reducedMotion.matches && eng);
+  a.raf = more ? requestAnimationFrame(orbFrame) : 0;
 }
 function scroll() { if (follow) window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }
 window.addEventListener('scroll', () => {
@@ -428,10 +472,10 @@ $('jump').onclick = () => { follow = true; scroll(); };
 
 // ---------- detail cards ----------
 function card(u) {
-  let el = document.getElementById('u' + u.idx);
+  let el = document.getElementById('u' + ukey(u));
   if (u.skipped) { if (el) el.remove(); return; }
   if (!el) {
-    el = document.createElement('div'); el.id = 'u' + u.idx; el.className = 'u';
+    el = document.createElement('div'); el.id = 'u' + ukey(u); el.className = 'u';
     el.innerHTML = `<div class="t"></div><div class="en"></div><div class="src"></div><div class="meta"></div>`;
     $('feed').appendChild(el);
     while ($('feed').children.length > 200) $('feed').firstChild.remove();
@@ -456,9 +500,9 @@ function live(text) {
     // row would blank out and then fade the same words in again.
     const now = performance.now();
     const u = [...state.utterances.values()].reverse().find(u => !u.source && !u.skipped);
-    if (u && !placeholders.has(u.idx) && now - (arrived.get(u.idx) ?? 0) < 1000) {
-      placeholders.set(u.idx, { src: state.live, en: state.prov });
-      if (shown.has('live')) shown.set('u' + u.idx, shown.get('live'));
+    if (u && !placeholders.has(ukey(u)) && now - (arrived.get(ukey(u)) ?? 0) < 1000) {
+      placeholders.set(ukey(u), { src: state.live, en: state.prov });
+      if (shown.has('live')) shown.set('u' + ukey(u), shown.get('live'));
     }
   }
   if (!text) state.prov = '';
@@ -489,26 +533,30 @@ const sigOf = ws => ws.map(w => w.t + (w.dim ? '~' : '')).join(' ');
 
 function buildRows() {
   const rows = [];
-  const blocks = [...state.blocks.values()].sort((a, b) => a.id - b.id);
-  const owned = new Set(blocks.flatMap(b => b.utterance_ids));
-  let prevT = null;
-  for (const b of blocks) {
-    const tail = b.utterance_ids.filter(i => i > b.polished_upto).map(i => state.utterances.get(i)).filter(Boolean);
-    const en = toWords(b.english_clean, false).concat(...tail.map(u => toWords(u.english || u.partial_english, true)));
-    const de = b.source_clean ? toWords(b.source_clean, false) : [].concat(...tail.map(u => toWords(u.source, true)));
-    rows.push({ key: 'b' + b.id, gap: prevT !== null && b.t_session - prevT > 20, en: { w: en, final: true }, de: { w: de, final: true } });
-    prevT = b.t_session;
-  }
-  prevT = null;
-  // fragments not in a block yet -- all of them without "Sätze säubern"
-  for (const u of [...state.utterances.values()].sort((a, b) => a.idx - b.idx)) {
-    if (u.skipped || owned.has(u.idx)) continue;
-    const ph = placeholders.get(u.idx) || {};
-    const en = u.english ? toWords(u.english, false) : toWords(u.partial_english || ph.en, true);
-    const de = u.source ? toWords(u.source, false) : toWords(ph.src, true);
-    if (!en.length && !de.length) continue;
-    rows.push({ key: 'u' + u.idx, gap: prevT !== null && u.t_session - prevT > 6, en: { w: en, final: !!u.english }, de: { w: de, final: !!u.source } });
-    prevT = u.t_session;
+  const sids = [...new Set([...state.utterances.values(), ...state.blocks.values()].map(x => x.sid))].sort((a, b) => a - b);
+  for (const sid of sids) {
+    // a new session starts a new paragraph below the old one
+    let gapNext = rows.length > 0, prevT = null;
+    const blocks = [...state.blocks.values()].filter(b => b.sid === sid).sort((a, b) => a.id - b.id);
+    const owned = new Set(blocks.flatMap(b => b.utterance_ids.map(i => `${sid}.${i}`)));
+    for (const b of blocks) {
+      const tail = b.utterance_ids.filter(i => i > b.polished_upto).map(i => state.utterances.get(`${sid}.${i}`)).filter(Boolean);
+      const en = toWords(b.english_clean, false).concat(...tail.map(u => toWords(u.english || u.partial_english, true)));
+      const de = b.source_clean ? toWords(b.source_clean, false) : [].concat(...tail.map(u => toWords(u.source, true)));
+      rows.push({ key: `b${sid}.${b.id}`, gap: gapNext || (prevT !== null && b.t_session - prevT > 20), en: { w: en, final: true }, de: { w: de, final: true } });
+      prevT = b.t_session; gapNext = false;
+    }
+    prevT = null;
+    // fragments not in a block yet -- all of them without "Sätze säubern"
+    const loose = [...state.utterances.values()].filter(u => u.sid === sid && !u.skipped && !owned.has(ukey(u))).sort((a, b) => a.idx - b.idx);
+    for (const u of loose) {
+      const ph = placeholders.get(ukey(u)) || {};
+      const en = u.english ? toWords(u.english, false) : toWords(u.partial_english || ph.en, true);
+      const de = u.source ? toWords(u.source, false) : toWords(ph.src, true);
+      if (!en.length && !de.length) continue;
+      rows.push({ key: 'u' + ukey(u), gap: gapNext || (prevT !== null && u.t_session - prevT > 6), en: { w: en, final: !!u.english }, de: { w: de, final: !!u.source } });
+      prevT = u.t_session; gapNext = false;
+    }
   }
   if (state.live) rows.push({ key: 'live', caret: !!state.prov, en: { w: toWords(state.prov, true), final: false }, de: { w: toWords(state.live, true), final: false } });
   return rows;
@@ -651,6 +699,13 @@ function paint() {
 
   // LAST, INVERT, PLAY: each kept word starts where it was and glides to where it is now
   const box2 = flow.getBoundingClientRect();
+  // anchored at the bottom, new lines push everything above them up -- let that glide too
+  const lift = box.top - box2.top;
+  if (Math.abs(lift) > .5) {
+    const cur = flow._lift ? new DOMMatrixReadOnly(getComputedStyle(flow).transform).m42 : 0;
+    flow._lift?.cancel();
+    flow._lift = flow.animate([{ transform: `translateY(${lift + cur}px)` }, { transform: 'none' }], { duration: 600, easing: EASE });
+  }
   for (const m of moved) {
     const r = m.el.getBoundingClientRect(), dx = m.pos.x - (r.left - box2.left), dy = m.pos.y - (r.top - box2.top);
     m.el._flip?.cancel();
@@ -661,8 +716,9 @@ function paint() {
   scroll();
 }
 
-function block(b) {
-  state.blocks.set(b.id, b);
+function block(b, sid) {
+  b.sid = sid ?? state.sid; state.sid = Math.max(state.sid, b.sid);
+  state.blocks.set(`${b.sid}.${b.id}`, b);
   hasText(); think(); schedulePaint();
 }
 function provisional(text) {

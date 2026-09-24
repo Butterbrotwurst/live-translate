@@ -12,6 +12,7 @@ from pathlib import Path
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import setup as model_setup
 from .config import PROFILES, TRANSLATORS, TTS_VOICE, default_translator
@@ -19,6 +20,8 @@ from .pipeline import Pipeline, Utterance
 
 STATIC = Path(__file__).parent / "static"
 app = FastAPI(title="live-translate")
+# vendored assets for the page (the thinking-orbs engine); everything stays local and offline
+app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 VOICES = ["af_heart", "af_bella", "af_nicole", "af_sarah", "am_adam", "am_michael", "bf_emma", "bf_isabella", "bm_george", "bm_lewis"]
 
@@ -33,6 +36,9 @@ class Session:
         self.status = "idle"
         self.settings: dict = {}
         self.last_transcript: Path | None = None
+        # every start numbers its utterances and blocks from 1 again; the page keys them by session
+        # too, or a new session's first line would overwrite the old first line at the top
+        self.sid = 0
         # latest model-setup progress; None once every model is in place
         self.setup: dict | None = None
         self.setup_thread: threading.Thread | None = None
@@ -60,6 +66,7 @@ class Session:
             "type": "snapshot",
             "status": self.status,
             "settings": self.settings,
+            "sid": self.sid,
             "utterances": [u.to_dict() for u in p.utterances] if p else [],
             "blocks": [b.to_dict() for b in p.blocks] if p else [],
             "options": {
@@ -78,6 +85,8 @@ class Session:
         if (self.thread and self.thread.is_alive()) or self.setup:
             return
         self.settings = s
+        self.sid += 1
+        sid = self.sid
         self.stop.clear()
         self.last_transcript = None
         p = Pipeline(
@@ -89,12 +98,12 @@ class Session:
             output_device=resolve_device(s.get("output_device"), "output"),
         )
         p.on_status = self._on_status
-        p.on_update = lambda u: self.emit({"type": "utterance", "utterance": u.to_dict()})
+        p.on_update = lambda u: self.emit({"type": "utterance", "utterance": u.to_dict(), "sid": sid})
         p.on_partial = lambda t: self.emit({"type": "partial", "text": t})
         p.on_provisional = lambda t: self.emit({"type": "provisional", "text": t})
         p.provisional = bool(s.get("provisional", True))
         p.polish = bool(s.get("polish", True))
-        p.on_block = lambda b: self.emit({"type": "block", "block": b.to_dict()})
+        p.on_block = lambda b: self.emit({"type": "block", "block": b.to_dict(), "sid": sid})
         p.on_level = lambda v: self.emit({"type": "level", "level": v})
         self.pipeline = p
         self.thread = threading.Thread(target=self._run, args=(p, s), daemon=True)
